@@ -14,22 +14,32 @@ from threading import Timer
 from random import random
 from os import stat
 from math import ceil
+from json import dumps as jsonEncode
+from sys import stdout
 
-SERVER_IP = '127.0.0.1'
+SERVER_IP = '127.0.0.1' #localhost
+#SERVER_IP = '137.189.97.35'  # lab.neP2P.com
+#SERVER_IP = '54.248.144.148' # AWS Ubuntu Server
 SERVER_PORT = RCV_PORT
 MAX_PKT_SIZE = 1000 #  MAX_PKT_SIZE = MAX_DATA - 4 = 1000
 MAX_BLOCK_SIZE = 1000000
 TIME_CHECK_PERIOD = 3
 strTime = time()
+pktNum = 0
 
 def checkTimeOut(conns):
+	global pktNum
 	conNum = len(conns)
 	curTime   = time()
-	print 'Timer Check:', conNum, 'connections', curTime - strTime , 'sec'
+	print '\nOnline C:', conNum, 'time:', curTime - strTime , 'sec', 'pktNum:', pktNum
+	pktNum = 0
 	while True:
 		if conNum == 0: break
 		if curTime - conns[0].time > END_WAIT:
-			print '\tConnection:', conns.pop(0).destAddr, 'is closed'
+			conns.pop(0)
+			stdout.write('x ')
+			stdout.flush()
+			#newprint '\tConnection:', conns.pop(0).destAddr, 'is closed'
 		conNum -= 1
 	t = Timer(TIME_CHECK_PERIOD, checkTimeOut, [conns])
 	t.daemon = True
@@ -46,9 +56,11 @@ class rudpServer:
 		self.skt.close()
 
 	def start(self):
+		global pktNum
 		checkTimeOut(self.conns)
 		while True:
 			recvData, addr = self.skt.recvfrom(MAX_DATA)
+			pktNum += 1
 			try:
 				recvPkt = decode(recvData)
 				#print recvPkt	## For debugging
@@ -62,7 +74,7 @@ class rudpServer:
 						self.conns.append( rudpConnection(addr, False) )
 						c = self.conns[-1]
 						sendPkt = rudpProcessSwitch[SYN](recvPkt, c)
-						print 'New Connection - {}'.format(str(len(self.conns)))
+						#print 'New Connection - {}'.format(str(len(self.conns)))
 						#, [c.destAddr for c in self.conns]
 					else: continue
 			except: continue
@@ -70,7 +82,9 @@ class rudpServer:
 				self.skt.sendto(encode(sendPkt), c.destAddr)
 				if sendPkt['pktType'] == FIN_ACK: 
 					self.conns.remove(c)
-					print 'Close Connection: ', c.destAddr
+					stdout.write('o ')
+					stdout.flush()
+					#print 'Close Connection: ', c.destAddr
 					#print '\tRemaining Connections', [c.destAddr for c in self.conns]
 				#print sendPkt	## For debugging
 

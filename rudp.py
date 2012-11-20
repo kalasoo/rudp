@@ -39,7 +39,7 @@ from rudpException import *
 # Constants         #
 #-------------------#
 MAX_DATA  = 1004
-MAX_RESND = 5
+MAX_RESND = 3
 RTO       = 3       #The retransmission time period
 END_WAIT  = 10      #Close Connection
 SDR_PORT  = 50007
@@ -137,11 +137,11 @@ class rudpConnection():
 	def __init__(self, destAddr, isClient):
 		self.destAddr = destAddr
 		self.wait     = SYN_ACK if isClient else SYN
+		self.pktId    = 0
 		if not isClient: 
 			self.accept = [SYN] #[SYN, DAT, FIN]
 			self.time   = 0
-		self.pktId    = 0
-		self.data     = ''
+			self.data   = ''
     
     	def checkTime(self, time):
     		if time - self.time > END_WAIT:
@@ -151,12 +151,12 @@ class rudpConnection():
 	def printConnection(self):
 		print '[RUDP Connection]'
 		print '\tdestAddr:', self.destAddr
+		print '\tpktId   :', self.pktId
 		print '\twait    :', self.wait
 		try:
 			print '\taccept  :', self.accep
 			print '\ttime    :', self.time
+			print '\tdata    :', self.data
 		except:
 			print 'NOT VALID'
-		print '\tpktId   :', self.pktId
-		print '\tdata    :', self.data
 
