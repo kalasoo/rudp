@@ -26,7 +26,7 @@ class DECODE_DATA_FAIL:
 #-------------------#
 class WRONG_PKT:
 	def __init__(self, func, recvPkt):
-		print '\t', func, recvPkt
+		print '\t', func
 class END_CONNECTION:
 	def __init__(self, c):
 		#print '\tconnnection is end'
