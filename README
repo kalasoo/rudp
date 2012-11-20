@@ -1,0 +1,18 @@
+#-------------------------------------#
+#   2012 - 2013 Final Year Project    #
+#   NeP2P                             #
+#   Task1: RUDP (Reliable UDP)        #
+#   YIN  MING  : IE / 5, CUHK         #
+#   YING XUHANG: IE / 4, CUHK         #
+#-------------------------------------#
+#   RUDP & USER                       #
+#-------------------------------------#
+
+
+rudp: a light version of reliable UDP
+
+rudpDumbUser: a dumb sender and receiver
+	testDumbClient, testDumbServer for testing
+
+rudpUser: a complete single server & multiple clients transmission model 
+	testClient, testServer for testing

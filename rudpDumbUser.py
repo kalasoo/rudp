@@ -5,7 +5,7 @@
 #   YIN  MING  : IE / 5, CUHK         #
 #   YING XUHANG: IE / 4, CUHK         #
 #-------------------------------------#
-#   rudp utilities                    #
+#   rudp dumb users                   #
 #-------------------------------------#
 from rudp import *
 from math import ceil

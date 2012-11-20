@@ -5,7 +5,7 @@
 #   YIN  MING  : IE / 5, CUHK         #
 #   YING XUHANG: IE / 4, CUHK         #
 #-------------------------------------#
-#   Server module                     #
+#   rudp user module                  #
 #-------------------------------------#
 
 from rudp import *
