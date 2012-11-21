@@ -97,7 +97,7 @@ class rudpSocket():
 		self.skt.close()
 
 	def sendto(self, rudpPkt, destAddr): #destAddr = (destIP, destPort)
-		if len(data) <= MAX_DATA:
+		if len(rudpPkt['data']) <= MAX_DATA:
 			self.skt.sendto(encode(rudpPkt), destAddr)
 		else:
 			print 'The data to send is to large: MAX_DATA -', MAX_DATA
