@@ -11,8 +11,9 @@
 
 rudp: a light version of reliable UDP
 
-rudpDumbUser: a dumb sender and receiver
-	testDumbClient, testDumbServer for testing
+rudp_old:
+	rudpDumbUser: a dumb sender and receiver
+		testDumbClient, testDumbServer for testing
 
-rudpUser: a complete single server & multiple clients transmission model 
-	testClient, testServer for testing
+	rudpUser: a complete single server & multiple clients transmission model 
+		testClient, testServer for testing
