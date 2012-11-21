@@ -7,7 +7,7 @@
 #-------------------------------------#
 #   rudp dumb users                   #
 #-------------------------------------#
-from rudp import *
+from rudp_old import *
 from math import ceil
 
 SERVER_IP   		= '127.0.0.1'
@@ -35,7 +35,7 @@ class rudpDumbReceiver:
 			recvPkt = decode(recvData)
 			if recvPkt['pktType'] != DAT: return None
 			sendPkt = rudpPacket(ACK, recvPkt['pktId'] + 1)
-		except: None
+		except: return None
 		else:
 			self.skt.sendto(encode(sendPkt), addr)
 			return recvPkt['data']

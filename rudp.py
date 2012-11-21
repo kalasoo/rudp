@@ -41,20 +41,13 @@ from rudpException import *
 MAX_DATA  = 1004
 MAX_RESND = 3
 RTO       = 3       #The retransmission time period
-END_WAIT  = 10      #Close Connection
 SDR_PORT  = 50007
 RCV_PORT  = 50008	# 50000-50010	
 #-------------------#
 # Constants         #
 #-------------------#
-SYN       = 0x40000000
 ACK       = 0x20000000
-FIN       = 0x10000000
 DAT       = 0x08000000
-SYN_ACK   = 0x04000000
-ACK_DAT   = 0x02000000
-FIN_ACK   = 0x01000000
-MAX_PKTID = 0xffffff
 	
 #-------------------#
 # RUDP              #
@@ -64,56 +57,17 @@ def rudpPacket(pktType = None, pktId = None, data = ''):
 #-------------------#
 # RUDP Server       #
 #-------------------#
-def processSYN(rudpPkt, c):
-	if SYN in c.accept:
-		if c.wait == SYN: c.accept += [DAT, FIN]
-		c.pktId = rudpPkt['pktId'] + 1
-		c.wait  = DAT
-		c.time  = time()
-		return rudpPacket(SYN_ACK, c.pktId)
-	raise WRONG_PKT('processSYN', rudpPkt)
-def processDAT(rudpPkt, c):
-	if DAT == c.wait:
-		if rudpPkt['pktId'] == c.pktId:
-			if SYN in c.accept: c.accept.remove(SYN)
-			c.pktId += 1
-			c.data  += rudpPkt['data']
-			c.time   = time() 
-			return rudpPacket(ACK, c.pktId)
-		elif rudpPkt['pktId'] == c.pktId - 1: 
-			c.time   = time()
-			return rudpPacket(ACK, c.pktId)
-		elif rudpPkt['pktId'] < c.pktId - 1: raise WRONG_PKT('processDAT [Duplicated]', rudpPkt) # Bugs
-	raise WRONG_PKT('processDAT', rudpPkt)
-def processFIN(rudpPkt, c):
-	if FIN in c.accept and rudpPkt['pktId'] == c.pktId:
-		if DAT in c.accept: c.accept.remove(DAT)
-		c.wait = FIN
-		c.time = time()
-		return rudpPacket(FIN_ACK, c.pktId + 1)
-	raise WRONG_PKT('processFIN', rudpPkt)
+'''
 #-------------------#
 # RUDP Client       #
 #-------------------#
-def processSYN_ACK(rudpPkt, c):
-	if SYN_ACK == c.wait and rudpPkt['pktId'] == c.pktId + 1:
-		c.wait = ACK
-		c.pktId += 1
-		return rudpPacket(DAT, c.pktId)
-	raise WRONG_PKT('processSYN_ACK', rudpPkt)
 def processACK(rudpPkt, c):
 	if ACK == c.wait and rudpPkt['pktId'] == c.pktId + 1:
 		c.pktId += 1
 		return rudpPacket(DAT, c.pktId)
 	raise WRONG_PKT('processACK', rudpPkt)
-def processFIN_ACK(rudpPkt, c):
-	if FIN_ACK == c.wait and rudpPkt['pktId'] == c.pktId + 1:
-		c.pktId += 1
-		raise END_CONNECTION(c)
-	raise WRONG_PKT('processFIN_ACK', rudpPkt)
+'''
 
-#rudpProcessSwitch[rudpPkt['pktType']](rudpPkt, c) <-- how you use process functions
-rudpProcessSwitch = {SYN: processSYN, SYN_ACK: processSYN_ACK, DAT: processDAT, ACK: processACK, FIN: processFIN, FIN_ACK: processFIN_ACK}
 #-------------------#
 # Protocol codec    #
 #-------------------#
@@ -131,32 +85,29 @@ def decode(bitStr):
 	    return rudpPacket(header & 0x7f000000, header & 0x00ffffff, bitStr[4:])
 
 #-------------------#
-# RUDP Connection   #
+# RUDP Socket       #
 #-------------------#
-class rudpConnection():
-	def __init__(self, destAddr, isClient):
-		self.destAddr = destAddr
-		self.wait     = SYN_ACK if isClient else SYN
-		self.pktId    = 0
-		if not isClient: 
-			self.accept = [SYN] #[SYN, DAT, FIN]
-			self.time   = 0
-			self.data   = ''
-    
-    	def checkTime(self, time):
-    		if time - self.time > END_WAIT:
-    			return False
-    		return True
+class rudpSocket():
+	def __init__(self, srcPort, isClient):
+		self.skt = socket(AF_INET, SOCK_DGRAM) #UDP
+		self.skt.bind(('', srcPort)) #used for recv
 
-	def printConnection(self):
-		print '[RUDP Connection]'
-		print '\tdestAddr:', self.destAddr
-		print '\tpktId   :', self.pktId
-		print '\twait    :', self.wait
+	def __del__(self):
+		self.skt.close()
+
+	def sendto(self, isReliable = True, rudpPkt, destAddr): #destAddr = (destIP, destPort)
+		if len(data) <= MAX_DATA:
+			self.skt.sendto(encode(rudpPkt), destAddr)
+		else
+			print 'The data to send is to large: MAX_DATA -', MAX_DATA
+
+	def recvfrom(self, isReliable = True):
+		recvData, addr = self.skt.recvfrom(MAX_DATA)
 		try:
-			print '\taccept  :', self.accep
-			print '\ttime    :', self.time
-			print '\tdata    :', self.data
-		except:
-			print 'NOT VALID'
-
+			recvPkt = decode(recvData)
+			if recvPkt['pktType'] != DAT: return None
+			if isReliable: sendPkt = rudpPacket(ACK, recvPkt['pktId'] + 1)
+		except: return None
+		else:
+			if isReliable: self.skt.sendto(encode(sendPkt), addr)
+			return recvPkt['data']

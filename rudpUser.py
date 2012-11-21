@@ -8,7 +8,7 @@
 #   rudp user module                  #
 #-------------------------------------#
 
-from rudp import *
+from rudp_old import *
 from time import sleep, time
 from threading import Timer
 from random import random
