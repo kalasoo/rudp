@@ -8,8 +8,11 @@
 #   rudp module                       #
 #-------------------------------------#
 from socket import *
-from struct import pack, unpack
 from rudpException import *
+from struct import pack, unpack
+
+from collections import OrderedDict as oDict
+
 
 #       8 BYTES    4 BYTES     MAX:1000BYTE
 #      +----------+-----------+-------------+
@@ -44,6 +47,7 @@ RTO       = 3       #The retransmission time period
 SDR_PORT  = 50007
 RCV_PORT  = 50008	# 50000-50010
 MAX_PKTID = 0xffffff
+MAX_CONN  = 1000
 #-------------------#
 # Constants         #
 #-------------------#
@@ -54,7 +58,7 @@ REL = 0x01000000
 #-------------------#
 # RUDP              #
 #-------------------#
-def rudpPacket(pktType = None, pktId = None, isReliable = True, data = ''):
+def rudpPacket(pktType = None, pktId = 0, isReliable = True, data = ''):
 	return {'type': pktType, 'rel': isReliable, 'id': pktId, 'data': data}
 
 #-------------------#
@@ -80,6 +84,9 @@ class rudpSocket():
 	def __init__(self, srcPort, isClient):
 		self.skt = socket(AF_INET, SOCK_DGRAM) #UDP
 		self.skt.bind(('', srcPort)) #used for recv
+		if not isClient:
+			self.conns = oDict()
+			self.conLn = 0
 
 	def __del__(self):
 		self.skt.close()
@@ -94,13 +101,37 @@ class rudpSocket():
 
 	def recvfrom(self):
 		recvData, addr = self.skt.recvfrom(MAX_DATA)
+		isReturn = False
 		try:
 			recvPkt = decode(recvData)
+		#type
 			if recvPkt['type'] != DAT: return None
-			if recvPkt['rel']: sendPkt = rudpPacket(ACK, recvPkt['id'] + 1)
+		#rel
+			if recvPkt['rel']:
+			#id
+				try:
+					pktId, conn = recvPkt['id'], self.conns[addr]
+					if pktId in conn:
+						isReturn = True
+						if pktId == conn[-1]:	conn[-1] += 1
+						else: 					conn.remove(pktId)
+					else:
+						if pktId > conn[-1]:
+							isReturn = True
+							conn.extend( range(conn[-1] + 1, pktId) )
+							conn.append( pktId + 1 ) 
+				except KeyError:
+			#no such a connection
+					if self.conLn == MAX_CONN:
+						self.conns.popitem(False)
+					else:
+						self.conLn += 1
+					self.conns[addr] = [recvPkt['id'] + 1]
+			#ACK Packet
+				sendPkt = rudpPacket(ACK, recvPkt['id'] + 1)
 		except: return None
 		else:
 			if recvPkt['rel']: self.skt.sendto(encode(sendPkt), addr)
-			return recvPkt['data']
+			if isReturn: return recvPkt, addr
 
 	#def resend(self, rudpPacket, destAddr, resendNum):
