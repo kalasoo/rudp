@@ -9,7 +9,6 @@
 #-------------------------------------#
 from socket import *
 from struct import pack, unpack
-from time import time 
 from rudpException import *
 
 #       8 BYTES    4 BYTES     MAX:1000BYTE
@@ -56,25 +55,14 @@ REL = 0x01000000
 # RUDP              #
 #-------------------#
 def rudpPacket(pktType = None, pktId = None, isReliable = True, data = ''):
-	return {'pktType': pktType, 'pktRel': isReliable, 'pktId': pktId, 'data': data}
-
-'''
-#-------------------#
-# RUDP Client       #
-#-------------------#
-def processACK(rudpPkt, c):
-	if ACK == c.wait and rudpPkt['pktId'] == c.pktId + 1:
-		c.pktId += 1
-		return rudpPacket(DAT, c.pktId)
-	raise WRONG_PKT('processACK', rudpPkt)
-'''
+	return {'type': pktType, 'rel': isReliable, 'id': pktId, 'data': data}
 
 #-------------------#
 # Protocol codec    #
 #-------------------#
 def encode(rudpPkt): #pktId can be either ACK # or SEQ #
-    if rudpPkt['pktId'] <= MAX_PKTID:
-        header = rudpPkt['pktType'] | rudpPkt['pktId'] | REL if rudpPkt['pktRel'] else rudpPkt['pktType'] | rudpPkt['pktId']
+    if rudpPkt['id'] <= MAX_PKTID:
+        header = rudpPkt['type'] | rudpPkt['id'] | REL if rudpPkt['rel'] else rudpPkt['type'] | rudpPkt['id']
         return pack('i', header) + rudpPkt['data']
     raise ENCODE_DATA_FAIL()
 
@@ -83,7 +71,7 @@ def decode(bitStr):
         raise DECODE_DATA_FAIL()
     else:
 	    header  = unpack('i', bitStr[:4])[0]
-	    return rudpPacket(header & 0x7f000000, header & 0x00ffffff, header & REL, bitStr[4:])
+	    return rudpPacket(header & 0x70000000, header & 0x00ffffff, header & REL, bitStr[4:])
 
 #-------------------#
 # RUDP Socket       #
@@ -99,16 +87,20 @@ class rudpSocket():
 	def sendto(self, rudpPkt, destAddr): #destAddr = (destIP, destPort)
 		if len(rudpPkt['data']) <= MAX_DATA:
 			self.skt.sendto(encode(rudpPkt), destAddr)
+			if rudpPkt['rel']:
+				print 'Looking forward ACK'
 		else:
-			print 'The data to send is to large: MAX_DATA -', MAX_DATA
+			print 'The data to send is too large: MAX_DATA -', MAX_DATA
 
 	def recvfrom(self):
 		recvData, addr = self.skt.recvfrom(MAX_DATA)
 		try:
 			recvPkt = decode(recvData)
-			if recvPkt['pktType'] != DAT: return None
-			if recvPkt['pktRel']: sendPkt = rudpPacket(ACK, recvPkt['pktId'] + 1)
+			if recvPkt['type'] != DAT: return None
+			if recvPkt['rel']: sendPkt = rudpPacket(ACK, recvPkt['id'] + 1)
 		except: return None
 		else:
-			if recvPkt['pktRel']: self.skt.sendto(encode(sendPkt), addr)
+			if recvPkt['rel']: self.skt.sendto(encode(sendPkt), addr)
 			return recvPkt['data']
+
+	#def resend(self, rudpPacket, destAddr, resendNum):
