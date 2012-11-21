@@ -19,21 +19,22 @@ from rudpException import *
 
 #BIT:   0         8       16       24     31
 #      +-+-------+--------+--------+--------+
-#      |0| TYPE  |       SEQ / ACK          |
+#      |0| FLAG  |       DAT / ACK          |
 #      +-+-------+--------+--------+--------+
 #      |                DATA                |
 #      |                                    |
 #      |                ....                |
 #      +------------------------------------+
 
-#      TYPE: _ _ _ _ _ _ _ 7 bits, each bit is either 0 or 1
-#            S A F D S A A
-#            Y C I A Y C C
-#            N K N T N K K
-#                    + + +
-#                    A D F
-#                    C A I
-#                    K T N
+#      FLAG: _ _ _ _ _ _ _ 7 bits, each bit is either 0 or 1
+#            D A         R
+#            A C         E
+#            T K         L
+#                        I
+#                        A
+#                        B
+#                        L
+#                        E
 
 #-------------------#
 # Constants         #
@@ -42,21 +43,21 @@ MAX_DATA  = 1004
 MAX_RESND = 3
 RTO       = 3       #The retransmission time period
 SDR_PORT  = 50007
-RCV_PORT  = 50008	# 50000-50010	
+RCV_PORT  = 50008	# 50000-50010
+MAX_PKTID = 0xffffff
 #-------------------#
 # Constants         #
 #-------------------#
-ACK       = 0x20000000
-DAT       = 0x08000000
+DAT = 0x40000000
+ACK = 0x20000000
+REL = 0x01000000
 	
 #-------------------#
 # RUDP              #
 #-------------------#
-def rudpPacket(pktType = None, pktId = None, data = ''):
-	return {'pktType': pktType, 'pktId': pktId, 'data': data}
-#-------------------#
-# RUDP Server       #
-#-------------------#
+def rudpPacket(pktType = None, pktId = None, isReliable = True, data = ''):
+	return {'pktType': pktType, 'pktRel': isReliable, 'pktId': pktId, 'data': data}
+
 '''
 #-------------------#
 # RUDP Client       #
@@ -73,7 +74,7 @@ def processACK(rudpPkt, c):
 #-------------------#
 def encode(rudpPkt): #pktId can be either ACK # or SEQ #
     if rudpPkt['pktId'] <= MAX_PKTID:
-        header = rudpPkt['pktType'] | rudpPkt['pktId']
+        header = rudpPkt['pktType'] | rudpPkt['pktId'] | REL if rudpPkt['pktRel'] else rudpPkt['pktType'] | rudpPkt['pktId']
         return pack('i', header) + rudpPkt['data']
     raise ENCODE_DATA_FAIL()
 
@@ -82,7 +83,7 @@ def decode(bitStr):
         raise DECODE_DATA_FAIL()
     else:
 	    header  = unpack('i', bitStr[:4])[0]
-	    return rudpPacket(header & 0x7f000000, header & 0x00ffffff, bitStr[4:])
+	    return rudpPacket(header & 0x7f000000, header & 0x00ffffff, header & REL, bitStr[4:])
 
 #-------------------#
 # RUDP Socket       #
@@ -95,19 +96,19 @@ class rudpSocket():
 	def __del__(self):
 		self.skt.close()
 
-	def sendto(self, isReliable = True, rudpPkt, destAddr): #destAddr = (destIP, destPort)
+	def sendto(self, rudpPkt, destAddr, isReliable = True): #destAddr = (destIP, destPort)
 		if len(data) <= MAX_DATA:
 			self.skt.sendto(encode(rudpPkt), destAddr)
-		else
+		else:
 			print 'The data to send is to large: MAX_DATA -', MAX_DATA
 
-	def recvfrom(self, isReliable = True):
+	def recvfrom(self):
 		recvData, addr = self.skt.recvfrom(MAX_DATA)
 		try:
 			recvPkt = decode(recvData)
 			if recvPkt['pktType'] != DAT: return None
-			if isReliable: sendPkt = rudpPacket(ACK, recvPkt['pktId'] + 1)
+			if recvPkt['pktRel']: sendPkt = rudpPacket(ACK, recvPkt['pktId'] + 1)
 		except: return None
 		else:
-			if isReliable: self.skt.sendto(encode(sendPkt), addr)
+			if recvPkt['pktRel']: self.skt.sendto(encode(sendPkt), addr)
 			return recvPkt['data']
