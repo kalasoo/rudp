@@ -96,7 +96,7 @@ class rudpSocket():
 	def __del__(self):
 		self.skt.close()
 
-	def sendto(self, rudpPkt, destAddr, isReliable = True): #destAddr = (destIP, destPort)
+	def sendto(self, rudpPkt, destAddr): #destAddr = (destIP, destPort)
 		if len(data) <= MAX_DATA:
 			self.skt.sendto(encode(rudpPkt), destAddr)
 		else:
