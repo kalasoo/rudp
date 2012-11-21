@@ -113,8 +113,8 @@ class rudpSocket():
 					pktId, conn = recvPkt['id'], self.conns[addr]
 					if pktId in conn:
 						isReturn = True
-						if pktId == conn[-1]:	conn[-1] += 1
-						else: 					conn.remove(pktId)
+						if pktId == conn[-1]: conn[-1] += 1
+						else: conn.remove(pktId)
 					else:
 						if pktId > conn[-1]:
 							isReturn = True
@@ -122,8 +122,8 @@ class rudpSocket():
 							conn.append( pktId + 1 ) 
 				except KeyError:
 			#no such a connection
-					if self.conLn == MAX_CONN:	self.conns.popitem(False)
-					else:						self.conLn += 1
+					if self.conLn == MAX_CONN: self.conns.popitem(False)
+					else: self.conLn += 1
 					self.conns[addr] = [recvPkt['id'] + 1]
 			#ACK Packet
 				sendPkt = rudpPacket(ACK, recvPkt['id'] + 1)
