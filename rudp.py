@@ -32,11 +32,6 @@ from collections import OrderedDict as oDict
 #            D A         R
 #            A C         E
 #            T K         L
-#                        I
-#                        A
-#                        B
-#                        L
-#                        E
 
 #-------------------#
 # Constants         #
@@ -100,6 +95,7 @@ class rudpSocket():
 			print 'The data to send is too large: MAX_DATA -', MAX_DATA
 
 	def recvfrom(self):
+		print self.conns
 		recvData, addr = self.skt.recvfrom(MAX_DATA)
 		isReturn = False
 		try:
@@ -121,12 +117,15 @@ class rudpSocket():
 							conn.extend( range(conn[-1] + 1, pktId) )
 							conn.append( pktId + 1 ) 
 				except KeyError:
+					isReturn = True
 			#no such a connection
 					if self.conLn == MAX_CONN: self.conns.popitem(False)
 					else: self.conLn += 1
 					self.conns[addr] = [recvPkt['id'] + 1]
 			#ACK Packet
 				sendPkt = rudpPacket(ACK, recvPkt['id'] + 1)
+			else:
+				isReturn = True
 		except: return None
 		else:
 			if recvPkt['rel']: self.skt.sendto(encode(sendPkt), addr)
