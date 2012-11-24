@@ -1,3 +1,5 @@
 from rudp import *
 
-s = rudpSocket(SDR_PORT, True)
+da = ('127.0.0.1', RCV_PORT)
+
+s = rudpSocket(SDR_PORT)

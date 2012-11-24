@@ -10,10 +10,6 @@
 from socket import *
 from rudpException import *
 from struct import pack, unpack
-
-from collections import OrderedDict as oDict
-
-
 #       8 BYTES    4 BYTES     MAX:1000BYTE
 #      +----------+-----------+-------------+
 #      |UDP HEADER|RUDP HEADER|  RUDP DATA  |
@@ -76,59 +72,44 @@ def decode(bitStr):
 # RUDP Socket       #
 #-------------------#
 class rudpSocket():
-	def __init__(self, srcPort, isClient):
+	def __init__(self, srcPort):
 		self.skt = socket(AF_INET, SOCK_DGRAM) #UDP
 		self.skt.bind(('', srcPort)) #used for recv
-		if not isClient:
-			self.conns = oDict()
-			self.conLn = 0
+		self.seq = 0
 
 	def __del__(self):
 		self.skt.close()
 
-	def sendto(self, rudpPkt, destAddr): #destAddr = (destIP, destPort)
-		if len(rudpPkt['data']) <= MAX_DATA:
-			self.skt.sendto(encode(rudpPkt), destAddr)
-			if rudpPkt['rel']:
+	#Assumption: you cannot send to different destinations concurrently
+	def sendto(self, string, destAddr, isReliable = False): #destAddr = (destIP, destPort)
+		if len(string) > MAX_DATA: return None
+	#pkt
+		sendPkt = rudpPacket(DAT, self.seq, isReliable, string)
+	#send pkt
+		try:
+			self.skt.sendto( encode(sendPkt), destAddr )
+			if isReliable:
 				print 'Looking forward ACK'
-		else:
-			print 'The data to send is too large: MAX_DATA -', MAX_DATA
+			self.seq = (self.seq + 1) % MAX_PKTID
+		except: return None
+		else: return len(string)
+
+	def resendto(self, pkt, destAddr, sendNum): #if sendNum == 3 --> no more resend
+		
 
 	def recvfrom(self):
-		print self.conns
 		recvData, addr = self.skt.recvfrom(MAX_DATA)
-		isReturn = False
 		try:
 			recvPkt = decode(recvData)
 		#type
 			if recvPkt['type'] != DAT: return None
 		#rel
 			if recvPkt['rel']:
-			#id
-				try:
-					pktId, conn = recvPkt['id'], self.conns[addr]
-					if pktId in conn:
-						isReturn = True
-						if pktId == conn[-1]: conn[-1] += 1
-						else: conn.remove(pktId)
-					else:
-						if pktId > conn[-1]:
-							isReturn = True
-							conn.extend( range(conn[-1] + 1, pktId) )
-							conn.append( pktId + 1 ) 
-				except KeyError:
-					isReturn = True
-			#no such a connection
-					if self.conLn == MAX_CONN: self.conns.popitem(False)
-					else: self.conLn += 1
-					self.conns[addr] = [recvPkt['id'] + 1]
 			#ACK Packet
 				sendPkt = rudpPacket(ACK, recvPkt['id'] + 1)
-			else:
-				isReturn = True
 		except: return None
 		else:
 			if recvPkt['rel']: self.skt.sendto(encode(sendPkt), addr)
-			if isReturn: return recvPkt, addr
+			return recvPkt, addr
 
 	#def resend(self, rudpPacket, destAddr, resendNum):
