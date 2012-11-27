@@ -7,11 +7,6 @@
 #-------------------------------------#
 #   rudp module                       #
 #-------------------------------------#
-from gevent.socket import *
-from rudpException import *
-from struct import pack, unpack
-from gevent import sleep, spawn
-from gevent.pool import Pool
 
 #       8 BYTES    4 BYTES     MAX:1000BYTE
 #      +----------+-----------+-------------+
@@ -33,7 +28,18 @@ from gevent.pool import Pool
 #            T K         L
 
 #-------------------#
-# Constants         #
+# Libraries         #
+#-------------------#
+from gevent.socket import *
+from rudpException import *
+from struct import pack, unpack
+from gevent import sleep, spawn
+from gevent.pool import Pool
+from time import time
+from Queue import Queue
+from Collections import OrderedDict as oDict
+#-------------------#
+# RUDP Constants    #
 #-------------------#
 MAX_DATA  = 1004
 MAX_RESND = 3
@@ -43,9 +49,6 @@ RCV_PORT  = 50008	# 50000-50010
 MAX_PKTID = 0xffffff
 MAX_CONN  = 1000
 ACK_LMT   = 100
-#-------------------#
-# Constants         #
-#-------------------#
 DAT = 0x40000000
 ACK = 0x20000000
 REL = 0x01000000
@@ -77,99 +80,97 @@ def decode(bitStr):
 #-------------------#
 class rudpSocket():
 	def __init__(self, srcPort):
-		self.skt = socket(AF_INET, SOCK_DGRAM) 	#UDP
+	#UDP socket
+		self.skt  = socket(AF_INET, SOCK_DGRAM) 	#UDP
 		self.skt.bind(('', srcPort)) 			#used for recv
-		self.seq = 0
-
+	#receivers, senders and ACK waiting list
+		self.snds = oDict()						#destAddr => a list of acceptable pktId
+		self.rcvs = oDict()						#destAddr => lastPktId
+		self.acks = oDict()						#(pktId, destAddr) => (timestamp, resendNum, sendPkt)
+	#coroutine
+		spawn(self.recvLoop)
+		spawn(self.ackLoop)
+	#packet Buffer
+		datPkts   = Queue()
 	def __del__(self):
 		self.skt.close()
-		self.pool.kill()
 
-	def waitACK(self):
+	def recvLoop(self):
 		while True:
-		#receive ACK
-			recvData, addr = self.skt.recvfrom(MAX_DATA)
+			data, addr = self.skt.recvfrom(MAX_DATA)
 			try:
-			#decode received data
-				recvPktInfo = ( decode(recvData)['id'], addr )
-				print recvPktInfo
-			#stop the coroutine
-				self.pool.killone(self.ackPool[recvPktInfo])
-			#delete the ackTuple
-				del self.ackPool[recvPktInfo]
-			except KeyError: continue
+				recvPkt = decode(data)
+			#type
+				if recvPkt['type'] == DAT: self.proDAT(recvPkt, addr)
+				elif recvPkt['type'] == ACK: self.proACK(recvPkt, addr)
+				else: continue
+			except Exception as e:
+				print e.message
+			sleep(0)
 
-	def addListener(self, sendPktInfo): #sendPktInfo = (sendPkt, destAddr)
-		if self.pool.full():
-			raise Exception('At maximum pool size')
-		else:
-			recvPktInfo = (sendPktInfo[0]['id'] + 1, sendPktInfo[1])
-			self.ackPool[recvPktInfo] = self.pool.spawn(self.ackListener, sendPktInfo, recvPktInfo)
-			self.ackPool[recvPktInfo].join()
-	
-	def ackListener(self, sendPktInfo, recvPktInfo):
-		for i in xrange(3):
-			sleep(RTO)
-			self.skt.sendto( encode(sendPktInfo[0]), sendPktInfo[1] )
-		del self.ackPool[recvPktInfo]
-		print '\ttimeout 3 times:'
+	def ackLoop(self):
+		while True:
+			sleep(0)
+
+	def proDAT(self, recvPkt, addr):
+		pass
+
+	def proACK(self, recvPkt, addr):
+		pass
+
 
 	#Assumption: you cannot send to different destinations concurrently
 	def sendto(self, string, destAddr, isReliable = False): #destAddr = (destIP, destPort)
-		if not hasattr(self, 'pool'):
-			self.ackPool = dict() #(pktId, addr) => ackTuple, ackTuple = (resndNum, greenlet)
-			self.pool    = Pool(ACK_LMT)
-			self.pool.spawn(self.waitACK)
 		if len(string) > MAX_DATA: return None
-	#pkt
-		sendPkt = rudpPacket(DAT, self.seq, isReliable, string)
-	#send pkt
+	#not reliable
+		if not isReliable: return self.skt.sendto( encode(sendPkt), destAddr )
+	#reliable
 		try:
-			self.skt.sendto( encode(sendPkt), destAddr )
-			if isReliable:
-				print 'Looking forward ACK'
-				self.addListener( (sendPkt, destAddr) )
-			self.seq = (self.seq + 1) % MAX_PKTID
-		except Exception as e:
-			print e.message 
-			return None
-		else: return len(string)
-
-	def _sendto(self, string, destAddr, isReliable):
-		if len(string) > MAX_DATA: return None
-	#pkt
-		sendPkt = rudpPacket(DAT, self.seq, isReliable, string)
+			sndId = self.snds[destAddr]
+		except KeyError:
+			if len(self.snds) == MAX_CONN: self.snds.popitem(False)
+			self.snds[destAddr], sndId = 0, 0
 	#send pkt
-		try:
-			self.skt.sendto( encode(sendPkt), destAddr )
-			if isReliable:
-				print 'Looking forward ACK'
-				self.addListener( (sendPkt, destAddr) )
-			self.seq = (self.seq + 1) % MAX_PKTID
-		except Exception as e:
-			print e.message 
-			return None
-		else: return len(string)
-		
+		ret = self.skt.sendto( encode(sendPkt), destAddr )
+		self.ends[destAddr] += 1
+	#ACK oDict
+		print 'Looking forward ACK'
+		self.acks[(sndId + 1, destAddr)] = (time, 0, sendPkt)
+		return ret
 
 	def recvfrom(self):
-		if hasattr(self, 'pool'):
-			self.ackPool = dict()
-			self.pool.kill()
-		recvData, addr = self.skt.recvfrom(MAX_DATA)
+		recvPkt, addr = datPkts.get() #Blocking
+		if recvPkt['type'] != DAT: return None
+		isReturn = True
 		try:
-			recvPkt = decode(recvData)
-		#type
-			if recvPkt['type'] != DAT: return None
+		#id
+			pktId, rcv = recvPkt['id'], self.rcvs[addr]
+		except KeyError:
+		#initiate + replacement
+			if pktId == 0:
+				if len(self.rcvs) == MAX_CONN: self.rcvs.popitem(False)
+				self.rcvs[addr] = [1]
+			else: 
+				recvPkt['rel'], isReturn = False, False
+		else:
 		#rel
 			if recvPkt['rel']:
-			#ACK Packet
-				sendPkt = rudpPacket(ACK, recvPkt['id'] + 1)
-				self.skt.sendto(encode(sendPkt), addr)
-		except Exception as e:
-			print e.message 
-			return None
-		else:
-			return recvPkt, addr
-
+				try:
+				#reset
+					if pktId == 0: self.rcvs[addr] = [1]
+				#normal	
+					if pktId == rcv[-1]: rcv[-1] += 1
+					else: rcv.remove(x) # => ValueError
+				except ValueError:
+				#shutdown
+					if pktId == MAX_PKTID: del self.rcvs[addr]
+					elif pktId > rcv[-1]:
+						rcv.extend( range(rcv[-1] + 1, pktId) )
+						rcv.append( pktId + 1 )
+					else: isReturn = False
+		if recvPkt['rel']:
+		#ACK Packet
+			sendPkt = rudpPacket(ACK, pktId + 1)
+			self.skt.sendto( encode(sendPkt), addr )
+		if isReturn: return recvPkt['data'], addr
 
