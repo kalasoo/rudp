@@ -113,19 +113,21 @@ class rudpSocket():
 			sleep(0)
 
 	def proDAT(self, recvPkt, addr):
-		isReturn = True
-		try:
-		#id
-			pktId, rcv = recvPkt['id'], self.rcvs[addr]
-		except KeyError:
-		#initiate + replacement
-			if pktId == 0:
-				if len(self.rcvs) == MAX_CONN: self.rcvs.popitem(False)
-				self.rcvs[addr] = [1]
-			else: recvPkt['rel'], isReturn = False, False
+	#not rel
+		if not recvPkt['rel']: self.datPkts.put((recvPkt, addr))
+	#rel
 		else:
-		#rel
-			if recvPkt['rel']:
+			isReturn = True
+			try:
+			#id
+				pktId, rcv = recvPkt['id'], self.rcvs[addr]
+			except KeyError:
+			#initiate + replacement
+				if pktId == 0:
+					if len(self.rcvs) == MAX_CONN: self.rcvs.popitem(False)
+					self.rcvs[addr] = [1]
+				else: return
+			else:
 				try:
 				#reset
 					if pktId == 0: self.rcvs[addr] = [1]
@@ -142,7 +144,6 @@ class rudpSocket():
 						rcv.append( pktId + 1 )
 				#duplicate packets
 					else: isReturn = False
-		if recvPkt['rel']:
 		#ACK Packet
 			sendPkt = rudpPacket(ACK, pktId + 1)
 			self.skt.sendto( encode(sendPkt), addr )
@@ -160,7 +161,7 @@ class rudpSocket():
 	def sendto(self, string, destAddr, isReliable = False): #destAddr = (destIP, destPort)
 		if len(string) > MAX_DATA: return None
 	#not reliable
-		if not isReliable: return self.skt.sendto( encode(sendPkt), destAddr )
+		if not isReliable: return self.skt.sendto( encode(rudpPacket(DAT, 0, isReliable, string)), destAddr )
 	#reliable
 		try:
 			sndId = self.snds[destAddr]
