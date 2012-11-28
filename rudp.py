@@ -113,6 +113,7 @@ class rudpSocket():
 		while True:
 			curTime	= time()
 			timeToWait = 0
+		#pop from left
 			for key in self.notACKed.iterkeys():
 				timeToWait = curTime - self.notACKed[key][0]
 				if timeToWait < 3: break
