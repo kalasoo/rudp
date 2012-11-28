@@ -84,9 +84,9 @@ class rudpSocket():
 		self.skt  = socket(AF_INET, SOCK_DGRAM) #UDP
 		self.skt.bind(('', srcPort)) 			#used for recv
 	#receivers, senders and ACK waiting list
-		self.rcvs = oDict()						#destAddr => a list of acceptable pktId
-		self.snds = oDict()						#destAddr => lastPktId
-		self.acks = oDict()						#(pktId, destAddr) => (timestamp, resendNum, sendPkt)
+		self.expId 		= oDict()				#destAddr => a list of acceptable pktId
+		self.nextId 	= oDict()				#destAddr => lastPktId
+		self.notACKed 	= oDict()				#(pktId, destAddr) => (timestamp, resendNum, sendPkt)
 	#coroutine
 		spawn(self.recvLoop)
 		spawn(self.ackLoop)
@@ -111,17 +111,17 @@ class rudpSocket():
 	def ackLoop(self):
 		while True:
 			timeToWait = 0
-			for key in self.acks.iterkeys():
-				timeToWait = time() - self.acks[key][0]
+			for key in self.notACKed.iterkeys():
+				timeToWait = time() - self.notACKed[key][0]
 				if timeToWait < 3: break
 				else:
 				#update resendNum
-					self.acks[key][1] += 1
-					if self.acks[key][1] == 3: 
-						del self.acks[key]
+					self.notACKed[key][1] += 1
+					if self.notACKed[key][1] == 3: 
+						del self.notACKed[key]
 						raise MAX_RESND_FAIL(key[1])
 				#put this to the end
-					self.acks[key] = self.acks.pop(key)
+					self.notACKed[key] = self.notACKed.pop(key)
 				#resendPkt
 					self.skt.sendto( encode(sendPkt), key[1] )
 			sleep(timeToWait)
@@ -134,28 +134,28 @@ class rudpSocket():
 			isReturn = True
 			try:
 			#id
-				pktId, rcv = recvPkt['id'], self.snds[addr]
+				pktId, expIdList = recvPkt['id'], self.expId[addr]
 			except KeyError:
 			#initiate + replacement
 				if pktId == 0:
-					if len(self.snds) == MAX_CONN: self.snds.popitem(False)
-					self.snds[addr] = [1]
+					if len(self.expId) == MAX_CONN: self.expId.popitem(False)
+					self.expId[addr] = [1]
 				else: return
 			else:
 				try:
 				#reset
-					if pktId == 0: self.snds[addr] = [1]
+					if pktId == 0: self.expId[addr] = [1]
 				#normal	
-					if pktId == rcv[-1]: rcv[-1] += 1
+					if pktId == expIdList[-1]: expIdList[-1] += 1
 				#lost packets received
-					else: rcv.remove(x) # => ValueError
+					else: expIdList.remove(x) # => ValueError
 				except ValueError:
 				#shutdown
-					if pktId == MAX_PKTID: del self.snds[addr]
+					if pktId == MAX_PKTID: del self.expId[addr]
 				#packet loss
-					elif pktId > rcv[-1]:
-						rcv.extend( range(rcv[-1] + 1, pktId) )
-						rcv.append( pktId + 1 )
+					elif pktId > expIdList[-1]:
+						expIdList.extend( range(expIdList[-1] + 1, pktId) )
+						expIdList.append( pktId + 1 )
 				#duplicate packets
 					else: isReturn = False
 		#ACK Packet
@@ -166,7 +166,7 @@ class rudpSocket():
 
 	def proACK(self, recvPkt, addr):
 		try:
-			del self.acks[(recvPkt['id'], addr)]
+			del self.notACKed[(recvPkt['id'], addr)]
 		except KeyError: return 
 
 
@@ -178,16 +178,16 @@ class rudpSocket():
 		if not isReliable: return self.skt.sendto( encode(rudpPacket(DAT, 0, isReliable, string)), destAddr )
 	#reliable
 		try:
-			rcvId = self.rcvs[destAddr]
+			nextId = self.nextId[destAddr]
 		except KeyError:
-			if len(self.rcvs) == MAX_CONN: self.rcvs.popitem(False)
-			self.rcvs[destAddr], rcvId = 0, 0
+			if len(self.nextId) == MAX_CONN: self.nextId.popitem(False)
+			self.nextId[destAddr], nextId = 0, 0
 	#send pkt
 		ret = self.skt.sendto( encode(sendPkt), destAddr )
-		self.rcvs[destAddr] += 1
+		self.nextId[destAddr] += 1
 	#ACK oDict
 		print 'Looking forward ACK'
-		self.acks[(rcvId + 1, destAddr)] = (time, 0, sendPkt)
+		self.notACKed[(nextId + 1, destAddr)] = (time, 0, sendPkt)
 		return ret
 
 	def recvfrom(self):
