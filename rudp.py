@@ -84,8 +84,8 @@ class rudpSocket():
 		self.skt  = socket(AF_INET, SOCK_DGRAM) #UDP
 		self.skt.bind(('', srcPort)) 			#used for recv
 	#receivers, senders and ACK waiting list
-		self.snds = oDict()						#destAddr => a list of acceptable pktId
-		self.rcvs = oDict()						#destAddr => lastPktId
+		self.rcvs = oDict()						#destAddr => a list of acceptable pktId
+		self.snds = oDict()						#destAddr => lastPktId
 		self.acks = oDict()						#(pktId, destAddr) => (timestamp, resendNum, sendPkt)
 	#coroutine
 		spawn(self.recvLoop)
@@ -134,24 +134,24 @@ class rudpSocket():
 			isReturn = True
 			try:
 			#id
-				pktId, rcv = recvPkt['id'], self.rcvs[addr]
+				pktId, rcv = recvPkt['id'], self.snds[addr]
 			except KeyError:
 			#initiate + replacement
 				if pktId == 0:
-					if len(self.rcvs) == MAX_CONN: self.rcvs.popitem(False)
-					self.rcvs[addr] = [1]
+					if len(self.snds) == MAX_CONN: self.snds.popitem(False)
+					self.snds[addr] = [1]
 				else: return
 			else:
 				try:
 				#reset
-					if pktId == 0: self.rcvs[addr] = [1]
+					if pktId == 0: self.snds[addr] = [1]
 				#normal	
 					if pktId == rcv[-1]: rcv[-1] += 1
 				#lost packets received
 					else: rcv.remove(x) # => ValueError
 				except ValueError:
 				#shutdown
-					if pktId == MAX_PKTID: del self.rcvs[addr]
+					if pktId == MAX_PKTID: del self.snds[addr]
 				#packet loss
 					elif pktId > rcv[-1]:
 						rcv.extend( range(rcv[-1] + 1, pktId) )
@@ -178,16 +178,16 @@ class rudpSocket():
 		if not isReliable: return self.skt.sendto( encode(rudpPacket(DAT, 0, isReliable, string)), destAddr )
 	#reliable
 		try:
-			sndId = self.snds[destAddr]
+			rcvId = self.rcvs[destAddr]
 		except KeyError:
-			if len(self.snds) == MAX_CONN: self.snds.popitem(False)
-			self.snds[destAddr], sndId = 0, 0
+			if len(self.rcvs) == MAX_CONN: self.rcvs.popitem(False)
+			self.rcvs[destAddr], rcvId = 0, 0
 	#send pkt
 		ret = self.skt.sendto( encode(sendPkt), destAddr )
-		self.snds[destAddr] += 1
+		self.rcvs[destAddr] += 1
 	#ACK oDict
 		print 'Looking forward ACK'
-		self.acks[(sndId + 1, destAddr)] = (time, 0, sendPkt)
+		self.acks[(rcvId + 1, destAddr)] = (time, 0, sendPkt)
 		return ret
 
 	def recvfrom(self):
