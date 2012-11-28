@@ -91,6 +91,7 @@ class rudpSocket():
 	#coroutine
 		spawn(self.recvLoop)
 		spawn(self.ackLoop)
+		sleep()
 	#packet Buffer
 		self.datPkts   = Queue()
 	def __del__(self):
@@ -98,6 +99,7 @@ class rudpSocket():
 
 	def recvLoop(self):
 		while True:
+			print 'recvLoop'
 			data, addr = self.skt.recvfrom(MAX_DATA)
 			try:
 				recvPkt = decode(data)
@@ -111,23 +113,25 @@ class rudpSocket():
 
 	def ackLoop(self):
 		while True:
+			print 'ackLoop'
 			curTime	= time()
-			timeToWait = 0
-		#pop from left
-			for key in self.notACKed.iterkeys():
-				timeToWait = curTime - self.notACKed[key][0]
+			timeToWait = 1
+		#pop from left: key = (pktId, destAddr) => value = (timestamp, resendNum, sendPkt)
+			for key, triple in self.notACKed.iteritems():
+				timeToWait = curTime - triple[0]
 				if timeToWait < 3: break
 				else:
-					self.notACKed[key][0] = curTime
+					triple[0] = curTime
 				#update resendNum
-					self.notACKed[key][1] += 1
-					if self.notACKed[key][1] == 3: 
+					triple[1] += 1
+					if triple[1] == 3: 
 						del self.notACKed[key]
 						raise MAX_RESND_FAIL(key[1])
 				#put this to the end
 					self.notACKed[key] = self.notACKed.pop(key)
 				#resendPkt
-					self.skt.sendto( encode(sendPkt), key[1] )
+					self.skt.sendto( encode(triple[2]), key[1] )
+			print 'ackLoop end', timeToWait
 			sleep(timeToWait)
 
 	def proDAT(self, recvPkt, addr):
@@ -140,6 +144,7 @@ class rudpSocket():
 			#id
 				pktId, expIdList = recvPkt['id'], self.expId[addr]
 			except KeyError:
+				pktId = recvPkt['id']
 			#initiate + replacement
 				if pktId == 0:
 					if len(self.expId) == MAX_CONN: self.expId.popitem(False)
@@ -186,12 +191,14 @@ class rudpSocket():
 		except KeyError:
 			if len(self.nextId) == MAX_CONN: self.nextId.popitem(False)
 			self.nextId[destAddr], nextId = 0, 0
+	#pkt
+		sendPkt = rudpPacket(DAT, nextId, isReliable, string)
 	#send pkt
 		ret = self.skt.sendto( encode(sendPkt), destAddr )
 		self.nextId[destAddr] += 1
 	#ACK oDict
 		print 'Looking forward ACK'
-		self.notACKed[(nextId + 1, destAddr)] = (time, 0, sendPkt)
+		self.notACKed[(nextId + 1, destAddr)] = [time(), 0, sendPkt]
 		return ret
 
 	def recvfrom(self):
