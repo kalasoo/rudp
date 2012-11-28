@@ -110,7 +110,21 @@ class rudpSocket():
 
 	def ackLoop(self):
 		while True:
-			sleep(0)
+			timeToWait = 0
+			for key in self.acks.iterkeys():
+				timeToWait = time() - self.acks[key][0]
+				if timeToWait < 3: break
+				else:
+				#update resendNum
+					self.acks[key][1] += 1
+					if self.acks[key][1] == 3: 
+						del self.acks[key]
+						raise MAX_RESND_FAIL(key[1])
+				#put this to the end
+					self.acks[key] = self.acks.pop(key)
+				#resendPkt
+					self.skt.sendto( encode(sendPkt), key[1] )
+			sleep(timeToWait)
 
 	def proDAT(self, recvPkt, addr):
 	#not rel
@@ -147,7 +161,7 @@ class rudpSocket():
 		#ACK Packet
 			sendPkt = rudpPacket(ACK, pktId + 1)
 			self.skt.sendto( encode(sendPkt), addr )
-		if isReturn: self.datPkts.put((recvPkt, addr))
+			if isReturn: self.datPkts.put((recvPkt, addr))
 
 
 	def proACK(self, recvPkt, addr):
@@ -170,7 +184,7 @@ class rudpSocket():
 			self.snds[destAddr], sndId = 0, 0
 	#send pkt
 		ret = self.skt.sendto( encode(sendPkt), destAddr )
-		self.ends[destAddr] += 1
+		self.snds[destAddr] += 1
 	#ACK oDict
 		print 'Looking forward ACK'
 		self.acks[(sndId + 1, destAddr)] = (time, 0, sendPkt)
