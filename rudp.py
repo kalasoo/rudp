@@ -64,17 +64,17 @@ def rudpPacket(pktType = None, pktId = 0, isReliable = True, data = ''):
 # Protocol codec    #
 #-------------------#
 def encode(rudpPkt): #pktId can be either ACK # or SEQ #
-    if rudpPkt['id'] <= MAX_PKTID:
-        header = rudpPkt['type'] | rudpPkt['id'] | REL if rudpPkt['rel'] else rudpPkt['type'] | rudpPkt['id']
-        return pack('i', header) + rudpPkt['data']
-    raise ENCODE_DATA_FAIL()
+	if rudpPkt['id'] <= MAX_PKTID:
+		header = rudpPkt['type'] | rudpPkt['id'] | REL if rudpPkt['rel'] else rudpPkt['type'] | rudpPkt['id']
+		return pack('i', header) + rudpPkt['data']
+	raise ENCODE_DATA_FAIL()
 
 def decode(bitStr):
-    if len(bitStr) < 4:
-        raise DECODE_DATA_FAIL()
-    else:
-	    header  = unpack('i', bitStr[:4])[0]
-	    return rudpPacket(header & 0x70000000, header & 0x00ffffff, header & REL, bitStr[4:])
+	if len(bitStr) < 4:
+		raise DECODE_DATA_FAIL()
+	else:
+		header  = unpack('i', bitStr[:4])[0]
+		return rudpPacket(header & 0x70000000, header & 0x00ffffff, header & REL, bitStr[4:])
 
 #-------------------#
 # RUDP Socket       #
@@ -99,7 +99,6 @@ class rudpSocket():
 
 	def recvLoop(self):
 		while True:
-			print 'recvLoop'
 			data, addr = self.skt.recvfrom(MAX_DATA)
 			try:
 				recvPkt = decode(data)
@@ -113,9 +112,8 @@ class rudpSocket():
 
 	def ackLoop(self):
 		while True:
-			print 'ackLoop'
 			curTime	= time()
-			timeToWait = 1
+			timeToWait = 0
 		#pop from left: key = (pktId, destAddr) => value = (timestamp, resendNum, sendPkt)
 			for key, triple in self.notACKed.iteritems():
 				timeToWait = curTime - triple[0]
@@ -131,7 +129,7 @@ class rudpSocket():
 					self.notACKed[key] = self.notACKed.pop(key)
 				#resendPkt
 					self.skt.sendto( encode(triple[2]), key[1] )
-			print 'ackLoop end', timeToWait
+			#print 'ackLoop end', timeToWait
 			sleep(timeToWait)
 
 	def proDAT(self, recvPkt, addr):
@@ -155,10 +153,11 @@ class rudpSocket():
 				#reset
 					if pktId == 0: self.expId[addr] = [1]
 				#normal	
-					if pktId == expIdList[-1]: expIdList[-1] += 1
+					elif pktId == expIdList[-1]: expIdList[-1] += 1
 				#lost packets received
 					else: expIdList.remove(pktId) # => ValueError
-				except ValueError:
+				except ValueError as e:
+					print e.message
 				#shutdown
 					if pktId == MAX_PKTID: del self.expId[addr]
 				#packet loss
@@ -197,7 +196,7 @@ class rudpSocket():
 		ret = self.skt.sendto( encode(sendPkt), destAddr )
 		self.nextId[destAddr] += 1
 	#ACK oDict
-		print 'Looking forward ACK'
+		#print 'Looking forward ACK'
 		self.notACKed[(nextId + 1, destAddr)] = [time(), 0, sendPkt]
 		return ret
 
@@ -205,6 +204,7 @@ class rudpSocket():
 		while True:
 			try:
 				recvPkt, addr = self.datPkts.get_nowait() #Blocking
+				print recvPkt
 				break
 			except QEmpty:
 				print 'no data'
