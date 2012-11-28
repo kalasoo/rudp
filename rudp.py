@@ -148,7 +148,7 @@ class rudpSocket():
 				#normal	
 					if pktId == expIdList[-1]: expIdList[-1] += 1
 				#lost packets received
-					else: expIdList.remove(x) # => ValueError
+					else: expIdList.remove(pktId) # => ValueError
 				except ValueError:
 				#shutdown
 					if pktId == MAX_PKTID: del self.expId[addr]
