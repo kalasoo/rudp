@@ -6,7 +6,14 @@ da = ('127.0.0.1', RCV_PORT)
 s = rudpSocket(SDR_PORT)
 strHead = 's:'
 
+option = [0,0,0,0,0,1,1,1,1,1]
 
-for i in xrange(10):
-	print s.sendto(strHead + str(i), da, True)
-	sleep(1)
+for i in option:
+	if i:
+		print s.sendto(strHead + 'sender -> receiver', da, True)
+	else:
+		print s.recvfrom()[0]
+
+while True:
+	print s.recvfrom()[0]
+
