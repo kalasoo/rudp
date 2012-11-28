@@ -201,13 +201,9 @@ class rudpSocket():
 		return ret
 
 	def recvfrom(self):
-		while True:
-			try:
-				recvPkt, addr = self.datPkts.get_nowait() #Blocking
-				print recvPkt
-				break
-			except QEmpty:
-				print 'no data'
-				sleep(1)
+		try:
+			recvPkt, addr = self.datPkts.get_nowait() #Non-blocking
+			print recvPkt
+		except QEmpty: raise NO_RECV_DATA()
 		return recvPkt['data'], addr
 

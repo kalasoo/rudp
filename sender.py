@@ -3,17 +3,21 @@ from random import randint
 
 da = ('127.0.0.1', RCV_PORT)
 
-s = rudpSocket(SDR_PORT)
-strHead = 's:'
+s1 = rudpSocket(SDR_PORT)
+s2 = rudpSocket(SDR_PORT - 1)
+strHead1 = 's1:'
+strHead2 = 's2:'
 
-option = [0,0,0,0,0,1,1,1,1,1]
-
-for i in option:
-	if i:
-		print s.sendto(strHead + 'sender -> receiver', da, True)
+for i in xrange(10):
+	if randint(0, 1):
+		s1.sendto(strHead1 + str(i), da, True)
 	else:
-		print s.recvfrom()[0]
+		s2.sendto(strHead2 + str(i), da, True)
+sleep(3)
+for i in xrange(10):
+	if randint(0, 1):
+		s1.sendto(strHead1 + str(i), da, True)
+	else:
+		s2.sendto(strHead2 + str(i), da, True)
 
-while True:
-	print s.recvfrom()[0]
-
+sleep(10000)
