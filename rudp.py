@@ -81,7 +81,7 @@ def decode(bitStr):
 class rudpSocket():
 	def __init__(self, srcPort):
 	#UDP socket
-		self.skt  = socket(AF_INET, SOCK_DGRAM) 	#UDP
+		self.skt  = socket(AF_INET, SOCK_DGRAM) #UDP
 		self.skt.bind(('', srcPort)) 			#used for recv
 	#receivers, senders and ACK waiting list
 		self.snds = oDict()						#destAddr => a list of acceptable pktId
@@ -113,10 +113,47 @@ class rudpSocket():
 			sleep(0)
 
 	def proDAT(self, recvPkt, addr):
-		pass
+		isReturn = True
+		try:
+		#id
+			pktId, rcv = recvPkt['id'], self.rcvs[addr]
+		except KeyError:
+		#initiate + replacement
+			if pktId == 0:
+				if len(self.rcvs) == MAX_CONN: self.rcvs.popitem(False)
+				self.rcvs[addr] = [1]
+			else: recvPkt['rel'], isReturn = False, False
+		else:
+		#rel
+			if recvPkt['rel']:
+				try:
+				#reset
+					if pktId == 0: self.rcvs[addr] = [1]
+				#normal	
+					if pktId == rcv[-1]: rcv[-1] += 1
+				#lost packets received
+					else: rcv.remove(x) # => ValueError
+				except ValueError:
+				#shutdown
+					if pktId == MAX_PKTID: del self.rcvs[addr]
+				#packet loss
+					elif pktId > rcv[-1]:
+						rcv.extend( range(rcv[-1] + 1, pktId) )
+						rcv.append( pktId + 1 )
+				#duplicate packets
+					else: isReturn = False
+		if recvPkt['rel']:
+		#ACK Packet
+			sendPkt = rudpPacket(ACK, pktId + 1)
+			self.skt.sendto( encode(sendPkt), addr )
+		if isReturn: self.datPkts.put((recvPkt, addr))
+
 
 	def proACK(self, recvPkt, addr):
-		pass
+		try:
+			del self.acks[(recvPkt['id'], addr)]
+		except KeyError: return 
+
 
 
 	#Assumption: you cannot send to different destinations concurrently
@@ -139,38 +176,6 @@ class rudpSocket():
 		return ret
 
 	def recvfrom(self):
-		recvPkt, addr = datPkts.get() #Blocking
-		if recvPkt['type'] != DAT: return None
-		isReturn = True
-		try:
-		#id
-			pktId, rcv = recvPkt['id'], self.rcvs[addr]
-		except KeyError:
-		#initiate + replacement
-			if pktId == 0:
-				if len(self.rcvs) == MAX_CONN: self.rcvs.popitem(False)
-				self.rcvs[addr] = [1]
-			else: 
-				recvPkt['rel'], isReturn = False, False
-		else:
-		#rel
-			if recvPkt['rel']:
-				try:
-				#reset
-					if pktId == 0: self.rcvs[addr] = [1]
-				#normal	
-					if pktId == rcv[-1]: rcv[-1] += 1
-					else: rcv.remove(x) # => ValueError
-				except ValueError:
-				#shutdown
-					if pktId == MAX_PKTID: del self.rcvs[addr]
-					elif pktId > rcv[-1]:
-						rcv.extend( range(rcv[-1] + 1, pktId) )
-						rcv.append( pktId + 1 )
-					else: isReturn = False
-		if recvPkt['rel']:
-		#ACK Packet
-			sendPkt = rudpPacket(ACK, pktId + 1)
-			self.skt.sendto( encode(sendPkt), addr )
-		if isReturn: return recvPkt['data'], addr
+		recvPkt, addr = self.datPkts.get() #Blocking
+		return recvPkt['data'], addr
 
