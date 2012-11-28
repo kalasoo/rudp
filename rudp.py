@@ -37,7 +37,8 @@ from gevent import sleep, spawn
 from gevent.pool import Pool
 from time import time
 from Queue import Queue
-from Collections import OrderedDict as oDict
+from Queue import Empty as QEmpty
+from collections import OrderedDict as oDict
 #-------------------#
 # RUDP Constants    #
 #-------------------#
@@ -91,7 +92,7 @@ class rudpSocket():
 		spawn(self.recvLoop)
 		spawn(self.ackLoop)
 	#packet Buffer
-		datPkts   = Queue()
+		self.datPkts   = Queue()
 	def __del__(self):
 		self.skt.close()
 
@@ -110,11 +111,13 @@ class rudpSocket():
 
 	def ackLoop(self):
 		while True:
+			curTime	= time()
 			timeToWait = 0
 			for key in self.notACKed.iterkeys():
-				timeToWait = time() - self.notACKed[key][0]
+				timeToWait = curTime - self.notACKed[key][0]
 				if timeToWait < 3: break
 				else:
+					self.notACKed[key][0] = curTime
 				#update resendNum
 					self.notACKed[key][1] += 1
 					if self.notACKed[key][1] == 3: 
@@ -191,6 +194,12 @@ class rudpSocket():
 		return ret
 
 	def recvfrom(self):
-		recvPkt, addr = self.datPkts.get() #Blocking
+		while True:
+			try:
+				recvPkt, addr = self.datPkts.get_nowait() #Blocking
+				break
+			except QEmpty:
+				print 'no data'
+				sleep(1)
 		return recvPkt['data'], addr
 
