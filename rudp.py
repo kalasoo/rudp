@@ -108,7 +108,7 @@ class rudpSocket():
 				else: continue
 			except Exception as e:
 				print e.message
-			sleep(0)
+			sleep()
 
 	def ackLoop(self):
 		while True:
@@ -139,7 +139,7 @@ class rudpSocket():
 		else:
 			isReturn = True
 			try:
-			#id
+			#id, expIdList
 				pktId, expIdList = recvPkt['id'], self.expId[addr]
 			except KeyError:
 				pktId = recvPkt['id']
@@ -201,9 +201,12 @@ class rudpSocket():
 		return ret
 
 	def recvfrom(self):
-		try:
-			recvPkt, addr = self.datPkts.get_nowait() #Non-blocking
-			print recvPkt
-		except QEmpty: raise NO_RECV_DATA()
+		while True:
+			try:
+				recvPkt, addr = self.datPkts.get_nowait() #Non-blocking
+				print recvPkt
+			except QEmpty:
+				print 'no data'
+				sleep(1)
 		return recvPkt['data'], addr
 
