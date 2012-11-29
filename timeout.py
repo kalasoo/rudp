@@ -1,44 +1,19 @@
 import gevent
-from gevent.queue import Queue
-from gevent import Greenlet
+from gevent import spawn
+from random import randint
+from time import time
 
-class Actor(gevent.Greenlet):
+def f1(t):
+    print 'f1 sleep', t, time()
+    gevent.sleep(2)
+    print 'f1 wakeup', t, time()
 
-    def __init__(self):
-        self.inbox = Queue()
-        Greenlet.__init__(self)
-
-    def receive(self, message):
-        """
-        Define in your subclass.
-        """
-        raise NotImplemented()
-
-    def _run(self):
-        self.running = True
-
-        while self.running:
-            message = self.inbox.get()
-            self.receive(message)
-
-
-class Pinger(Actor):
-    def receive(self, message):
-        print message
-        pong.inbox.put('ping')
+i = 0
+while True:
+    r = randint(0,1)
+    if r == 0: 
         gevent.sleep(1)
-
-class Ponger(Actor):
-    def receive(self, message):
-        print message
-        ping.inbox.put('pong')
-        gevent.sleep(1)
-
-ping = Pinger()
-pong = Ponger()
-
-ping.start()
-pong.start()
-
-ping.inbox.put('start')
-gevent.joinall([ping, pong])
+        print time()
+    else: 
+        spawn(f1, i)
+        i+=1

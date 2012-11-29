@@ -127,7 +127,7 @@ class rudpSocket():
 	#receivers, senders and ACK waiting list
 		self.expId 		= ListDict()			#destAddr => a list of acceptable pktId
 		self.nextId 	= ListDict()			#destAddr => lastPktId
-		self.notACKed 	= oDict()				#(pktId, destAddr) => (timestamp, resendNum, sendPkt)
+		self.notACKed 	= oDict()				#(pktId, destAddr) => [timestamp, resendNum, sendPkt]
 	#coroutine
 		spawn(self.recvLoop)
 		spawn(self.ackLoop)
@@ -231,7 +231,9 @@ class rudpSocket():
 	#send pkt
 		ret = self.skt.sendto( encode(sendPkt), destAddr )
 		print self.nextId[destAddr]
-		self.nextId[destAddr][1] += 1
+		if nextId = MAX_PKTID: nextId = 0
+		else: nextId += 1 
+		self.nextId[destAddr][1] += nextId
 	#ACK oDict
 		#print 'Looking forward ACK'
 		self.notACKed[(nextId + 1, destAddr)] = [time(), 0, sendPkt]

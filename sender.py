@@ -13,11 +13,13 @@ for i in xrange(10):
 		s1.sendto(strHead1 + str(i), da, True)
 	else:
 		s2.sendto(strHead2 + str(i), da, True)
+	sleep(1)
+'''
 sleep(3)
 for i in xrange(10):
 	if randint(0, 1):
 		s1.sendto(strHead1 + str(i), da, True)
 	else:
 		s2.sendto(strHead2 + str(i), da, True)
-
+'''
 sleep(10000)
