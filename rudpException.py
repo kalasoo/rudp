@@ -11,11 +11,11 @@
 #-------------------#
 # Exceptions        #
 #-------------------#
-class RTO_TIME_OUT(Exception): pass
-class END_TIME_OUT(Exception): pass
+class NO_RECV_DATA(Exception): pass
 class MAX_RESND_FAIL:
-	def __init__(self):
-		print '\ttimeout 3 times:'
+	def __init__(self, addr):
+		self.addr = addr
+		print '\ttimeout 3 times', addr
 #-------------------#
 class ENCODE_DATA_FAIL:
 	def __init__(self, dataToEncode):
