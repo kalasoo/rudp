@@ -2,24 +2,15 @@ from rudp import *
 from random import randint
 
 da = ('127.0.0.1', RCV_PORT)
-
-s1 = rudpSocket(SDR_PORT)
-s2 = rudpSocket(SDR_PORT - 1)
-strHead1 = 's1:'
-strHead2 = 's2:'
+s = []
+strHead =[]
 
 for i in xrange(10):
-	if randint(0, 1):
-		s1.sendto(strHead1 + str(i), da, True)
-	else:
-		s2.sendto(strHead2 + str(i), da, True)
-	sleep(1)
-'''
-sleep(3)
-for i in xrange(10):
-	if randint(0, 1):
-		s1.sendto(strHead1 + str(i), da, True)
-	else:
-		s2.sendto(strHead2 + str(i), da, True)
-'''
+	s.append( rudpSocket(SDR_PORT - 9 + i) )
+	strHead.append('s'+str(i)+':')
+
+for i in xrange(10000):
+	r = randint(0, 9)
+	s[r].sendto(strHead[r] + str(i), da , True)
+	sleep(0.5)
 sleep(10000)

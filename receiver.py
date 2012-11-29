@@ -7,4 +7,5 @@ r = rudpSocket(RCV_PORT)
 strHead = 'r:'
 
 while True:
-	print r.recvfrom()[0]
+	print r.recvfrom()
+	sleep()

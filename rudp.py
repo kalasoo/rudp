@@ -172,7 +172,10 @@ class rudpSocket():
 			sleep(timeToWait)
 
 	def proDAT(self, recvPkt, addr):
-		print self.expId.list
+		try:
+			print self.expId.list[-1]
+		except: 
+			print 'T_T'
 	#not rel
 		if not recvPkt['rel']: self.datPkts.put((recvPkt, addr))
 	#rel
@@ -206,13 +209,16 @@ class rudpSocket():
 				#duplicate packets
 					else: isReturn = False
 		#ACK Packet
-			sendPkt = rudpPacket(ACK, pktId + 1)
+			if pktId == MAX_PKTID: pktId = 0
+			else: pktId += 1
+			sendPkt = rudpPacket(ACK, pktId)
 			self.skt.sendto( encode(sendPkt), addr )
 			if isReturn: self.datPkts.put((recvPkt, addr))
 
 
 	def proACK(self, recvPkt, addr):
 		try:
+			print (recvPkt['id'], addr), 'ACK received'
 			del self.notACKed[(recvPkt['id'], addr)]
 		except KeyError: return 
 
@@ -230,20 +236,19 @@ class rudpSocket():
 		sendPkt = rudpPacket(DAT, nextId, isReliable, string)
 	#send pkt
 		ret = self.skt.sendto( encode(sendPkt), destAddr )
-		print self.nextId[destAddr]
-		if nextId = MAX_PKTID: nextId = 0
-		else: nextId += 1 
-		self.nextId[destAddr][1] += nextId
+		nextId += 1
+		if nextId > MAX_PKTID: nextId = 0
+		self.nextId[destAddr][1] = nextId
 	#ACK oDict
 		#print 'Looking forward ACK'
-		self.notACKed[(nextId + 1, destAddr)] = [time(), 0, sendPkt]
+		self.notACKed[(nextId, destAddr)] = [time(), 0, sendPkt]
 		return ret
 
 	def recvfrom(self):
 		while True:
 			try:
 				recvPkt, addr = self.datPkts.get_nowait() #Non-blocking
-				print recvPkt
+				break
 			except QEmpty:
 				print 'no data'
 				sleep(1)
