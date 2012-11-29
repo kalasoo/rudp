@@ -34,7 +34,6 @@ from gevent.socket import *
 from rudpException import *
 from struct import pack, unpack
 from gevent import sleep, spawn
-from gevent.pool import Pool
 from time import time
 from Queue import Queue
 from Queue import Empty as QEmpty
@@ -44,7 +43,7 @@ from collections import OrderedDict as oDict
 #-------------------#
 MAX_DATA  = 1004
 MAX_RESND = 3
-RTO       = 1       #The retransmission time period
+RTO       = 1 		#The retransmission time period
 SDR_PORT  = 50007
 RCV_PORT  = 50008	# 50000-50010
 MAX_PKTID = 0xffffff
@@ -77,6 +76,47 @@ def decode(bitStr):
 		return rudpPacket(header & 0x70000000, header & 0x00ffffff, header & REL, bitStr[4:])
 
 #-------------------#
+# DataStructure     #
+#-------------------#
+class ListDict():
+	def __init__(self):
+	#addr => a ref to an element in the list 
+		self.dict = dict()
+	#pos  => [addr, value]
+		self.list = list()
+	#length of dict & list
+		self.len  = 0
+
+	def __getitem__(self, addr):
+		ref = self.dict[addr]
+		self.list.remove(ref)
+		self.list.append(ref)
+		return ref
+
+	def resetItem(self, addr,value):
+		ref = self.dict[addr]
+		self.list.remove(ref)
+		self.list.append(ref)
+		ref[1] = value
+
+	def newItem(self, addr, value):
+		if self.len == MAX_CONN:
+		#remove the first one in the ListDict
+			del self.dict[self.list[0][0]]
+			self.list.pop(0)
+		else:
+			self.len += 1
+	#add new item
+		ref = [addr, value]
+		self.list.append(ref)
+		self.dict[addr] = ref
+
+	def __delitem__(self, addr):
+		self.list.remove( self.dict[addr] )
+		del self.dict[addr]
+		self.len -= 1
+
+#-------------------#
 # RUDP Socket       #
 #-------------------#
 class rudpSocket():
@@ -85,8 +125,8 @@ class rudpSocket():
 		self.skt  = socket(AF_INET, SOCK_DGRAM) #UDP
 		self.skt.bind(('', srcPort)) 			#used for recv
 	#receivers, senders and ACK waiting list
-		self.expId 		= oDict()				#destAddr => a list of acceptable pktId
-		self.nextId 	= oDict()				#destAddr => lastPktId
+		self.expId 		= ListDict()			#destAddr => a list of acceptable pktId
+		self.nextId 	= ListDict()			#destAddr => lastPktId
 		self.notACKed 	= oDict()				#(pktId, destAddr) => (timestamp, resendNum, sendPkt)
 	#coroutine
 		spawn(self.recvLoop)
@@ -100,14 +140,13 @@ class rudpSocket():
 	def recvLoop(self):
 		while True:
 			data, addr = self.skt.recvfrom(MAX_DATA)
-			try:
-				recvPkt = decode(data)
-			#type
-				if recvPkt['type'] == DAT: self.proDAT(recvPkt, addr)
-				elif recvPkt['type'] == ACK: self.proACK(recvPkt, addr)
-				else: continue
-			except Exception as e:
-				print e.message
+			recvPkt = decode(data)
+		#type
+			if recvPkt['type'] == DAT: self.proDAT(recvPkt, addr)
+			elif recvPkt['type'] == ACK: self.proACK(recvPkt, addr)
+			else: continue
+			#except Exception as e:
+			#	print e.message
 			sleep()
 
 	def ackLoop(self):
@@ -133,6 +172,7 @@ class rudpSocket():
 			sleep(timeToWait)
 
 	def proDAT(self, recvPkt, addr):
+		print self.expId.list
 	#not rel
 		if not recvPkt['rel']: self.datPkts.put((recvPkt, addr))
 	#rel
@@ -140,18 +180,17 @@ class rudpSocket():
 			isReturn = True
 			try:
 			#id, expIdList
-				pktId, expIdList = recvPkt['id'], self.expId[addr]
+				pktId, expIdList = recvPkt['id'], self.expId[addr][1]
 			except KeyError:
 				pktId = recvPkt['id']
 			#initiate + replacement
 				if pktId == 0:
-					if len(self.expId) == MAX_CONN: self.expId.popitem(False)
-					self.expId[addr] = [1]
+					self.expId.newItem(addr, [1])
 				else: return
 			else:
 				try:
 				#reset
-					if pktId == 0: self.expId[addr] = [1]
+					if pktId == 0: self.expId.resetItem(addr, [1])
 				#normal	
 					elif pktId == expIdList[-1]: expIdList[-1] += 1
 				#lost packets received
@@ -177,24 +216,22 @@ class rudpSocket():
 			del self.notACKed[(recvPkt['id'], addr)]
 		except KeyError: return 
 
-
-
-	#Assumption: you cannot send to different destinations concurrently
 	def sendto(self, string, destAddr, isReliable = False): #destAddr = (destIP, destPort)
 		if len(string) > MAX_DATA: return None
 	#not reliable
 		if not isReliable: return self.skt.sendto( encode(rudpPacket(DAT, 0, isReliable, string)), destAddr )
 	#reliable
 		try:
-			nextId = self.nextId[destAddr]
+			nextId = self.nextId[destAddr][1]
 		except KeyError:
-			if len(self.nextId) == MAX_CONN: self.nextId.popitem(False)
-			self.nextId[destAddr], nextId = 0, 0
+			self.nextId.newItem(destAddr, 0)
+			nextId = 0
 	#pkt
 		sendPkt = rudpPacket(DAT, nextId, isReliable, string)
 	#send pkt
 		ret = self.skt.sendto( encode(sendPkt), destAddr )
-		self.nextId[destAddr] += 1
+		print self.nextId[destAddr]
+		self.nextId[destAddr][1] += 1
 	#ACK oDict
 		#print 'Looking forward ACK'
 		self.notACKed[(nextId + 1, destAddr)] = [time(), 0, sendPkt]
@@ -209,4 +246,3 @@ class rudpSocket():
 				print 'no data'
 				sleep(1)
 		return recvPkt['data'], addr
-
