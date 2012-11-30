@@ -13,9 +13,9 @@
 #-------------------#
 class NO_RECV_DATA(Exception): pass
 class MAX_RESND_FAIL:
-	def __init__(self, addr):
+	def __init__(self, addr, sendPkt):
 		self.addr = addr
-		print '\ttimeout 3 times', addr
+		print '\ttimeout 3 times', addr, sendPkt
 #-------------------#
 class ENCODE_DATA_FAIL:
 	def __init__(self, dataToEncode):

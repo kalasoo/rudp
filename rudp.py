@@ -41,12 +41,13 @@ from collections import OrderedDict as oDict
 #-------------------#
 # RUDP Constants    #
 #-------------------#
-MAX_DATA  = 1004
+MAX_DATA  = 10244
 MAX_RESND = 3
-RTO       = 1 		#The retransmission time period
+RTO       = 3 		#The retransmission time period
 SDR_PORT  = 50007
 RCV_PORT  = 50008	# 50000-50010
-MAX_PKTID = 0xffffff
+#MAX_PKTID = 0xffffff
+MAX_PKTID = 10
 MAX_CONN  = 1000
 ACK_LMT   = 100
 DAT = 0x40000000
@@ -149,7 +150,7 @@ class rudpSocket():
 			else: continue
 			#except Exception as e:
 			#	print e.message
-			sleep()
+			sleep(0)
 
 	def ackLoop(self):
 		while True:
@@ -157,15 +158,23 @@ class rudpSocket():
 			timeToWait = 0
 		#pop from left: key = (pktId, destAddr) => value = (timestamp, resendNum, sendPkt)
 			for key, triple in self.notACKed.iteritems():
-				timeToWait = curTime - triple[0]
-				if timeToWait < 3: break
+				if curTime - triple[0] < 3:
+					timeToWait = triple[0] + RTO - curTime 
+					break
 				else:
 					triple[0] = curTime
 				#update resendNum
 					triple[1] += 1
 					if triple[1] == 3: 
+					#remove from notAcked
 						del self.notACKed[key]
-						raise MAX_RESND_FAIL(key[1])
+					#remove from nextId
+					try: 
+						del self.nextId[key[1]]
+					#send MAX_PKTID to receiver
+						self.skt.sendto( encode(rudpPacket(DAT, MAX_PKTID, True, '')), key[1] ) 
+						raise MAX_RESND_FAIL(key[1], triple[2])
+					except KeyError: pass 
 				#put this to the end
 					self.notACKed[key] = self.notACKed.pop(key)
 				#resendPkt
