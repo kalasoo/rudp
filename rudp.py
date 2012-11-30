@@ -80,23 +80,25 @@ def decode(bitStr):
 #-------------------#
 class ListDict():
 	def __init__(self):
-	#addr => a ref to an element in the list 
+	#addr   => a ref to an element in the list 
 		self.dict = dict()
-	#pos  => [addr, value]
+	#index  => [addr, value]
 		self.list = list()
 	#length of dict & list
 		self.len  = 0
 
 	def __getitem__(self, addr):
 		ref = self.dict[addr]
-		self.list.remove(ref)
-		self.list.append(ref)
+		if self.list[-1] != ref:
+			self.list.remove(ref)
+			self.list.append(ref)
 		return ref
 
 	def resetItem(self, addr,value):
 		ref = self.dict[addr]
-		self.list.remove(ref)
-		self.list.append(ref)
+		if self.list[-1] != ref:
+			self.list.remove(ref)
+			self.list.append(ref)
 		ref[1] = value
 
 	def newItem(self, addr, value):
