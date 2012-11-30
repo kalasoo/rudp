@@ -246,12 +246,13 @@ class rudpSocket():
 		self.notACKed[(nextId, destAddr)] = [time(), 0, sendPkt]
 		return ret
 
-	def recvfrom(self):
+	def recvfrom(self, isBlocking = True):
 		while True:
 			try:
 				recvPkt, addr = self.datPkts.get_nowait() #Non-blocking
 				break
 			except QEmpty:
 				print 'no data'
+				if not isBlocking: raise NO_RECV_DATA()
 				sleep(1)
 		return recvPkt['data'], addr
