@@ -95,7 +95,7 @@ class ListDict():
 			self.list.append(ref)
 		return ref
 
-	def resetItem(self, addr,value):
+	def resetItem(self, addr, value):
 		ref = self.dict[addr]
 		if self.list[-1] != ref:
 			self.list.remove(ref)
@@ -134,7 +134,7 @@ class rudpSocket():
 	#coroutine
 		spawn(self.recvLoop)
 		spawn(self.ackLoop)
-		sleep()
+		sleep(0)
 	#packet Buffer
 		self.datPkts   = Queue()
 	def __del__(self):
@@ -147,7 +147,9 @@ class rudpSocket():
 		#type
 			if recvPkt['type'] == DAT: self.proDAT(recvPkt, addr)
 			elif recvPkt['type'] == ACK: self.proACK(recvPkt, addr)
-			else: continue
+			else:
+				sleep(0) 
+				continue
 			#except Exception as e:
 			#	print e.message
 			sleep(0)
@@ -158,7 +160,7 @@ class rudpSocket():
 			timeToWait = 0
 		#pop from left: key = (pktId, destAddr) => value = (timestamp, resendNum, sendPkt)
 			for key, triple in self.notACKed.iteritems():
-				if curTime - triple[0] < 3:
+				if curTime - triple[0] < RTO:
 					timeToWait = triple[0] + RTO - curTime 
 					break
 				else:
@@ -169,16 +171,19 @@ class rudpSocket():
 					#remove from notAcked
 						del self.notACKed[key]
 					#remove from nextId
-					try: 
-						del self.nextId[key[1]]
-					#send MAX_PKTID to receiver
-						self.skt.sendto( encode(rudpPacket(DAT, MAX_PKTID, True, '')), key[1] ) 
-						raise MAX_RESND_FAIL(key[1], triple[2])
-					except KeyError: pass 
-				#put this to the end
-					self.notACKed[key] = self.notACKed.pop(key)
-				#resendPkt
-					self.skt.sendto( encode(triple[2]), key[1] )
+						try: 
+							del self.nextId[key[1]]
+						#send MAX_PKTID to receiver
+							self.skt.sendto( encode(rudpPacket(DAT, MAX_PKTID, True, '')), key[1] ) 
+						except KeyError: pass 
+					#raise exception
+						print 'MAX_RESND_FAIL', key[1], triple[2]['id']
+						#raise MAX_RESND_FAIL(key[1], triple[2])
+					else:
+					#put this to the end
+						self.notACKed[key] = self.notACKed.pop(key)
+					#resendPkt
+						self.skt.sendto( encode(triple[2]), key[1] )
 			#print 'ackLoop end', timeToWait
 			sleep(timeToWait)
 
