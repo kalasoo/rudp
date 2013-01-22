@@ -188,10 +188,12 @@ class rudpSocket():
 			sleep(timeToWait)
 
 	def proDAT(self, recvPkt, addr):
+		'''
 		try:
 			print self.expId.list[-1]
 		except: 
 			print 'T_T'
+		'''
 	#not rel
 		if not recvPkt['rel']: self.datPkts.put((recvPkt, addr))
 	#rel
@@ -215,7 +217,7 @@ class rudpSocket():
 				#lost packets received
 					else: expIdList.remove(pktId) # => ValueError
 				except ValueError as e:
-					print e.message
+					#print e.message
 				#shutdown
 					if pktId == MAX_PKTID: del self.expId[addr]
 				#packet loss
@@ -234,7 +236,7 @@ class rudpSocket():
 
 	def proACK(self, recvPkt, addr):
 		try:
-			print (recvPkt['id'], addr), 'ACK received'
+			#print (recvPkt['id'], addr), 'ACK received'
 			del self.notACKed[(recvPkt['id'], addr)]
 		except KeyError: return 
 
@@ -266,7 +268,7 @@ class rudpSocket():
 				recvPkt, addr = self.datPkts.get_nowait() #Non-blocking
 				break
 			except QEmpty:
-				print 'no data'
+				#print 'no data'
 				if not isBlocking: raise NO_RECV_DATA()
 				sleep(1)
 		return recvPkt['data'], addr
