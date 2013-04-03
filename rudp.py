@@ -43,11 +43,11 @@ from collections import OrderedDict as oDict
 #-------------------#
 MAX_DATA  = 10244
 MAX_RESND = 3
-RTO       = 3 		#The retransmission time period
+RTO       = 1 		#The retransmission time period
 SDR_PORT  = 50007
 RCV_PORT  = 50008	# 50000-50010
-#MAX_PKTID = 0xffffff
-MAX_PKTID = 10
+MAX_PKTID = 0xffffff
+#MAX_PKTID = 10
 MAX_CONN  = 1000
 ACK_LMT   = 100
 DAT = 0x40000000
@@ -131,12 +131,15 @@ class rudpSocket():
 		self.expId 		= ListDict()			#destAddr => a list of acceptable pktId
 		self.nextId 	= ListDict()			#destAddr => lastPktId
 		self.notACKed 	= oDict()				#(pktId, destAddr) => [timestamp, resendNum, sendPkt]
+	#packet Buffer
+		self.datPkts   = Queue()
 	#coroutine
 		spawn(self.recvLoop)
 		spawn(self.ackLoop)
 		sleep(0)
-	#packet Buffer
-		self.datPkts   = Queue()
+	#failed Connections
+		self.failed = []
+
 	def __del__(self):
 		self.skt.close()
 
@@ -166,6 +169,7 @@ class rudpSocket():
 				else:
 					triple[0] = curTime
 				#update resendNum
+					#print 'timeout', key[1][0], triple[2]['id']
 					triple[1] += 1
 					if triple[1] == 3: 
 					#remove from notAcked
@@ -175,10 +179,9 @@ class rudpSocket():
 							del self.nextId[key[1]]
 						#send MAX_PKTID to receiver
 							self.skt.sendto( encode(rudpPacket(DAT, MAX_PKTID, True, '')), key[1] ) 
-						except KeyError: pass 
+						except KeyError: continue 
 					#raise exception
-						print 'MAX_RESND_FAIL', key[1], triple[2]['id']
-						#raise MAX_RESND_FAIL(key[1], triple[2])
+						self.failed.append(key[1])
 					else:
 					#put this to the end
 						self.notACKed[key] = self.notACKed.pop(key)
@@ -237,8 +240,11 @@ class rudpSocket():
 	def proACK(self, recvPkt, addr):
 		try:
 			#print (recvPkt['id'], addr), 'ACK received'
+			#print recvPkt['id'], addr
 			del self.notACKed[(recvPkt['id'], addr)]
-		except KeyError: return 
+		except KeyError:
+			#print 'proACK Fail' 
+			return 
 
 	def sendto(self, string, destAddr, isReliable = False): #destAddr = (destIP, destPort)
 		if len(string) > MAX_DATA: return None
@@ -270,5 +276,5 @@ class rudpSocket():
 			except QEmpty:
 				#print 'no data'
 				if not isBlocking: raise NO_RECV_DATA()
-				sleep(1)
+				sleep(0.01)
 		return recvPkt['data'], addr
