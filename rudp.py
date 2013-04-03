@@ -34,7 +34,7 @@ from gevent.socket import *
 from rudpException import *
 from struct import pack, unpack
 from gevent import sleep, spawn
-from time import time
+from time import time, localtime, strftime
 from Queue import Queue
 from Queue import Empty as QEmpty
 from collections import OrderedDict as oDict
@@ -53,7 +53,24 @@ ACK_LMT   = 100
 DAT = 0x40000000
 ACK = 0x20000000
 REL = 0x01000000
-	
+#-------------------#
+# RUDP MODE         #
+#-------------------#
+RUDP_DEBUG = False
+RUDP_LOG   = True
+class Logger():
+	def __init__(self, f = None):
+		if f:
+			self.f = f
+		else:
+			self.f = open('rudp_log_' + str(int(time())) + '.txt', 'a')
+		self.logWriteLine( 'NEW_SOCKET', strftime("%a, %d %b %Y %H:%M:%S +0000", localtime()) )
+	def __del__(self):
+		self.logWriteLine( 'END_SOCKET', strftime("%a, %d %b %Y %H:%M:%S +0000", localtime()) )
+		self.f.close()
+	def logWriteLine(self, option, *data):
+		self.f.write( option + ' ' + ' '.join(str(i) for i in data) + '\n' )
+
 #-------------------#
 # RUDP              #
 #-------------------#
@@ -139,9 +156,15 @@ class rudpSocket():
 		sleep(0)
 	#failed Connections
 		self.failed = []
+	#write log
+		if RUDP_LOG:
+			self.log = Logger()
 
 	def __del__(self):
 		self.skt.close()
+		if RUDP_LOG:
+			del self.log
+		
 
 	def recvLoop(self):
 		while True:
@@ -150,9 +173,6 @@ class rudpSocket():
 		#type
 			if recvPkt['type'] == DAT: self.proDAT(recvPkt, addr)
 			elif recvPkt['type'] == ACK: self.proACK(recvPkt, addr)
-			else:
-				sleep(0) 
-				continue
 			#except Exception as e:
 			#	print e.message
 			sleep(0)
@@ -171,7 +191,11 @@ class rudpSocket():
 				#update resendNum
 					#print 'timeout', key[1][0], triple[2]['id']
 					triple[1] += 1
+					if RUDP_LOG:
+						self.log.logWriteLine('LOSS', key[1], key[0])
 					if triple[1] == 3: 
+						if RUDP_LOG:
+							self.log.logWriteLine('CON_FAIL', key[1])
 					#remove from notAcked
 						del self.notACKed[key]
 					#remove from nextId
@@ -191,12 +215,6 @@ class rudpSocket():
 			sleep(timeToWait)
 
 	def proDAT(self, recvPkt, addr):
-		'''
-		try:
-			print self.expId.list[-1]
-		except: 
-			print 'T_T'
-		'''
 	#not rel
 		if not recvPkt['rel']: self.datPkts.put((recvPkt, addr))
 	#rel
@@ -210,6 +228,8 @@ class rudpSocket():
 			#initiate + replacement
 				if pktId == 0:
 					self.expId.newItem(addr, [1])
+					if RUDP_LOG:
+						self.log.logWriteLine('NEW_RECEIVER', addr)
 				else: return
 			else:
 				try:
@@ -242,6 +262,8 @@ class rudpSocket():
 			#print (recvPkt['id'], addr), 'ACK received'
 			#print recvPkt['id'], addr
 			del self.notACKed[(recvPkt['id'], addr)]
+			if RUDP_LOG:
+				self.log.logWriteLine('ACK', addr, recvPkt['id'])
 		except KeyError:
 			#print 'proACK Fail' 
 			return 
@@ -254,11 +276,15 @@ class rudpSocket():
 		try:
 			nextId = self.nextId[destAddr][1]
 		except KeyError:
+			if RUDP_LOG:
+				self.log.logWriteLine('NEW_SENDER', destAddr)
 			self.nextId.newItem(destAddr, 0)
 			nextId = 0
 	#pkt
 		sendPkt = rudpPacket(DAT, nextId, isReliable, string)
 	#send pkt
+		if RUDP_LOG:
+			self.log.logWriteLine('SEND', destAddr, len(sendPkt['data']))
 		ret = self.skt.sendto( encode(sendPkt), destAddr )
 		nextId += 1
 		if nextId > MAX_PKTID: nextId = 0
@@ -272,6 +298,8 @@ class rudpSocket():
 		while True:
 			try:
 				recvPkt, addr = self.datPkts.get_nowait() #Non-blocking
+				if RUDP_LOG:
+					self.log.logWriteLine('RECV', addr, len(recvPkt['data']))
 				break
 			except QEmpty:
 				#print 'no data'
