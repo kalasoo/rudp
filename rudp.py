@@ -43,11 +43,10 @@ from collections import OrderedDict as oDict
 #-------------------#
 MAX_DATA  = 10244
 MAX_RESND = 3
-RTO       = 1 		#The retransmission time period
+RTO       = 1 		# The retransmission time period
 SDR_PORT  = 50007
 RCV_PORT  = 50008	# 50000-50010
 MAX_PKTID = 0xffffff
-#MAX_PKTID = 10
 MAX_CONN  = 1000
 ACK_LMT   = 100
 DAT = 0x40000000
@@ -57,9 +56,12 @@ REL = 0x01000000
 # RUDP MODE         #
 #-------------------#
 RUDP_DEBUG = False
-RUDP_LOG   = True
+RUDP_LOG   = False
+RUDP_STAT  = True
+STAT_PKTS  = 10
 class Logger():
 	def __init__(self, f = None):
+		self.initTime = time();
 		if f:
 			self.f = f
 		else:
@@ -69,7 +71,55 @@ class Logger():
 		self.logWriteLine( 'END_SOCKET', strftime("%a, %d %b %Y %H:%M:%S +0000", localtime()) )
 		self.f.close()
 	def logWriteLine(self, option, *data):
-		self.f.write( option + ' ' + ' '.join(str(i) for i in data) + '\n' )
+		data = [str(time() - self.initTime), option] + list(data)
+		self.f.write( ' '.join(str(i) for i in data) + '\n' )
+
+class Recorder():
+	def __init__(self, pkt_period = STAT_PKTS):
+		self.lastTime = time()
+		self.perStat  = {}  # addr  => [sendpkt_num, sendbyte_num, recvpkt_num, recvbyte_num, retransmit_num]
+		self.ttlStat  = {}	# addr  => [sendpkt_num, sendbyte_num, recvpkt_num, recvbyte_num, retransmit_num]
+		self.timeStat = []  # index => [timestamp, perStat]
+		self.ttlTime  = 0
+		self.period   = pkt_period if pkt_period else STAT_PKTS
+		self.onperiod = 0
+	def updateSend(self, addr, length):
+		if addr not in self.perStat:
+			self.perStat[addr] = [0, 0, 0, 0, 0]
+		self.perStat[addr][0] += 1
+		if length >= 0:
+			self.perStat[addr][1] += length
+		self.onperiod += 1
+		if self.onperiod == self.period:
+			self.updateOnTime()
+			self.onperiod = 0
+	def updateRecv(self, addr, length):
+		if addr not in self.perStat:
+			self.perStat[addr] = [0, 0, 0, 0, 0]
+		self.perStat[addr][2] += 1
+		if length >= 0:
+			self.perStat[addr][3] += length
+		self.onperiod += 1
+		if self.onperiod == self.period:
+			self.updateOnTime()
+			self.onperiod = 0
+	def updateLoss(self, addr):
+		self.perStat[addr][4] += 1
+	def updateOnTime(self):
+		self.timeStat.append([time() - self.lastTime, self.perStat])
+		self.lastTime = time()
+		for addr, value in self.perStat.iteritems():
+			if addr in self.ttlStat:
+				self.ttlStat[addr] = [sum(a) for a in zip(self.ttlStat[addr], value)]
+			else:
+				self.ttlStat[addr] = value
+		self.perStat = {}
+		self.printPeriod()
+	def printPeriod(self):
+		print str(self.timeStat[-1])
+	def printTTL(self):
+		print str(self.timeStat)
+		print str(self.ttlStat)
 
 #-------------------#
 # RUDP              #
@@ -91,7 +141,7 @@ def decode(bitStr):
 		raise DECODE_DATA_FAIL()
 	else:
 		header  = unpack('i', bitStr[:4])[0]
-		return rudpPacket(header & 0x70000000, header & 0x00ffffff, header & REL, bitStr[4:])
+		return rudpPacket(header & 0x7e000000, header & 0x00ffffff, header & REL, bitStr[4:])
 
 #-------------------#
 # DataStructure     #
@@ -139,7 +189,7 @@ class ListDict():
 #-------------------#
 # RUDP Socket       #
 #-------------------#
-class rudpSocket():
+class rudpSocket(object):
 	def __init__(self, srcPort):
 	#UDP socket
 		self.skt  = socket(AF_INET, SOCK_DGRAM) #UDP
@@ -159,11 +209,16 @@ class rudpSocket():
 	#write log
 		if RUDP_LOG:
 			self.log = Logger()
+	#stat
+		if RUDP_STAT:
+			self.rec = Recorder()
 
 	def __del__(self):
 		self.skt.close()
 		if RUDP_LOG:
 			del self.log
+		if RUDP_STAT:
+			self.rec.printTTL()
 		
 
 	def recvLoop(self):
@@ -193,6 +248,8 @@ class rudpSocket():
 					triple[1] += 1
 					if RUDP_LOG:
 						self.log.logWriteLine('LOSS', key[1], key[0])
+					if RUDP_STAT:
+						self.rec.updateLoss(key[1])
 					if triple[1] == 3: 
 						if RUDP_LOG:
 							self.log.logWriteLine('CON_FAIL', key[1])
@@ -285,6 +342,8 @@ class rudpSocket():
 	#send pkt
 		if RUDP_LOG:
 			self.log.logWriteLine('SEND', destAddr, len(sendPkt['data']))
+		if RUDP_STAT:
+			self.rec.updateSend(destAddr, len(sendPkt['data']))
 		ret = self.skt.sendto( encode(sendPkt), destAddr )
 		nextId += 1
 		if nextId > MAX_PKTID: nextId = 0
@@ -300,6 +359,8 @@ class rudpSocket():
 				recvPkt, addr = self.datPkts.get_nowait() #Non-blocking
 				if RUDP_LOG:
 					self.log.logWriteLine('RECV', addr, len(recvPkt['data']))
+				if RUDP_STAT:
+					self.rec.updateRecv(addr, len(recvPkt['data']))
 				break
 			except QEmpty:
 				#print 'no data'
