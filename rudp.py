@@ -43,7 +43,7 @@ from collections import OrderedDict as oDict
 #-------------------#
 MAX_DATA  = 10244
 MAX_RESND = 3
-RTO       = 1 		# The retransmission time period
+RTO       = 3 		# The retransmission time period
 SDR_PORT  = 50007
 RCV_PORT  = 50008	# 50000-50010
 MAX_PKTID = 0xffffff
@@ -104,6 +104,8 @@ class Recorder():
 			self.updateOnTime()
 			self.onperiod = 0
 	def updateLoss(self, addr):
+		if addr not in self.perStat:
+			self.perStat[addr] = [0, 0, 0, 0, 0]
 		self.perStat[addr][4] += 1
 	def updateOnTime(self):
 		self.timeStat.append([time() - self.lastTime, self.perStat])
