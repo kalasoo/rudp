@@ -58,7 +58,7 @@ REL = 0x01000000
 RUDP_DEBUG = False
 RUDP_LOG   = False
 RUDP_STAT  = True
-STAT_PKTS  = 10
+STAT_PKTS  = 50
 class Logger():
 	def __init__(self, f = None):
 		self.initTime = time();
@@ -78,14 +78,14 @@ class Recorder():
 	def __init__(self, pkt_period = STAT_PKTS):
 		self.lastTime = time()
 		self.perStat  = {}  # addr  => [sendpkt_num, sendbyte_num, recvpkt_num, recvbyte_num, retransmit_num]
-		self.ttlStat  = {}	# addr  => [sendpkt_num, sendbyte_num, recvpkt_num, recvbyte_num, retransmit_num]
+		self.ttlStat  = {'ttl': [0, [0] * 5]}	# addr  => [sendpkt_num, sendbyte_num, recvpkt_num, recvbyte_num, retransmit_num]
 		self.timeStat = []  # index => [timestamp, perStat]
 		self.ttlTime  = 0
 		self.period   = pkt_period if pkt_period else STAT_PKTS
 		self.onperiod = 0
 	def updateSend(self, addr, length):
 		if addr not in self.perStat:
-			self.perStat[addr] = [0, 0, 0, 0, 0]
+			self.perStat[addr] = [0] * 5
 		self.perStat[addr][0] += 1
 		if length >= 0:
 			self.perStat[addr][1] += length
@@ -95,7 +95,7 @@ class Recorder():
 			self.onperiod = 0
 	def updateRecv(self, addr, length):
 		if addr not in self.perStat:
-			self.perStat[addr] = [0, 0, 0, 0, 0]
+			self.perStat[addr] = [0] * 5
 		self.perStat[addr][2] += 1
 		if length >= 0:
 			self.perStat[addr][3] += length
@@ -105,23 +105,49 @@ class Recorder():
 			self.onperiod = 0
 	def updateLoss(self, addr):
 		if addr not in self.perStat:
-			self.perStat[addr] = [0, 0, 0, 0, 0]
+			self.perStat[addr] = [0] * 5
 		self.perStat[addr][4] += 1
 	def updateOnTime(self):
-		self.timeStat.append([time() - self.lastTime, self.perStat])
+		perTime = time() - self.lastTime
+		self.timeStat.append([perTime, self.perStat])
 		self.lastTime = time()
+		self.ttlStat['ttl'][0] += perTime
+		lastTTLStat = self.ttlStat['ttl'][1]
 		for addr, value in self.perStat.iteritems():
+			lastTTLStat = [sum(a) for a in zip(lastTTLStat, value)]
 			if addr in self.ttlStat:
 				self.ttlStat[addr] = [sum(a) for a in zip(self.ttlStat[addr], value)]
 			else:
 				self.ttlStat[addr] = value
+		self.ttlStat['ttl'][1] = lastTTLStat
 		self.perStat = {}
 		self.printPeriod()
 	def printPeriod(self):
-		print str(self.timeStat[-1])
+		print '\n==o==\n'
+		perTime = self.timeStat[-1][0]
+		for addr, stat in self.timeStat[-1][1].iteritems():
+			print addr, '=>'
+			rate = [ '%0.2f' % (i / perTime) for i in stat[:4]]
+			print '\tSend rate:', rate[0], 'P/s', rate[1], 'B/s'
+			print '\tRecv rate:', rate[2], 'P/s', rate[3], 'B/s'
+			print '\tPktl rate:', int((stat[4] / (stat[0] + stat[2])) * 100), '%'
+		print 'All:'
+		ttlTime = self.ttlStat['ttl'][0]
+		stat = self.ttlStat['ttl'][1]
+		rate = [ '%0.2f' % (i / ttlTime) for i in stat[:4]]
+		print '\tSend rate:', rate[0], 'P/s', rate[1], 'B/s'
+		print '\tRecv rate:', rate[2], 'P/s', rate[3], 'B/s'
+		print '\tPktl rate:', int((stat[4] / (stat[0] + stat[2])) * 100), '%'
+		print '\n==x==\n'
 	def printTTL(self):
-		print str(self.timeStat)
-		print str(self.ttlStat)
+		print '\n==o==\n'
+		# print 'Periodic stat:'
+		# for stat in self.timeStat:
+		# 	print '\t', str(stat)
+		print 'Total stat:'
+		for addr, stat in self.ttlStat.iteritems():
+			print '\t', addr, '=>', stat 
+		print '\n==x==\n'
 
 #-------------------#
 # RUDP              #
