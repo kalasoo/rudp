@@ -264,6 +264,7 @@ class rudpSocket(object):
 	#stat
 		if RUDP_STAT:
 			self.rec = Recorder()
+		self.BUF_SIZE = MAX_DATA #shaun
 
 	def __del__(self):
 		self.skt.close()
@@ -281,7 +282,7 @@ class rudpSocket(object):
 	def recvLoop(self):
 		while True:
 			#print 'recvLoop'
-			data, addr = self.skt.recvfrom(MAX_DATA)
+			data, addr = self.skt.recvfrom(self.BUF_SIZE)
 			recvPkt = decode(data)
 		#type
 			if recvPkt['type'] == DAT: self.proDAT(recvPkt, addr)
@@ -412,7 +413,9 @@ class rudpSocket(object):
 		self.notACKed[(nextId, destAddr)] = [time(), 0, sendPkt]
 		return ret
 
-	def recvfrom(self, isBlocking = True):
+	def recvfrom(self, buf_size = MAX_DATA, isBlocking = True):
+		# BUF_SIZE is meaningless in rudp
+		self.BUF_SIZE = buf_size # shaun
 		while True:
 			try:
 				recvPkt, addr = self.datPkts.get_nowait() #Non-blocking
@@ -426,3 +429,7 @@ class rudpSocket(object):
 				if not isBlocking: raise NO_RECV_DATA()
 				sleep(0)
 		return recvPkt['data'], addr
+
+	def recv(self, buf_size = MAX_DATA, isBlocking = True)
+		self.recvfrom(buf_size, isBlocking)
+		return recvPkt['data']
