@@ -243,7 +243,7 @@ class ListDict():
 # RUDP Socket       #
 #-------------------#
 class rudpSocket(object):
-	def __init__(self, srcPort):
+	def __init__(self):
 	#UDP socket
 		self.skt  = socket(AF_INET, SOCK_DGRAM) #UDP
 	#receivers, senders and ACK waiting list
