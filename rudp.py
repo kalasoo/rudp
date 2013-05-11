@@ -251,6 +251,7 @@ class rudpSocket(object):
 
 	def recvLoop(self):
 		while True:
+			#print 'recvLoop'
 			data, addr = self.skt.recvfrom(MAX_DATA)
 			recvPkt = decode(data)
 		#type
@@ -262,6 +263,7 @@ class rudpSocket(object):
 
 	def ackLoop(self):
 		while True:
+			#print 'ackLoop'
 			curTime	= time()
 			timeToWait = 0
 		#pop from left: key = (pktId, destAddr) => value = (timestamp, resendNum, sendPkt)
